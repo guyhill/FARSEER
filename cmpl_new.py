@@ -123,6 +123,8 @@ class ColumnAlias(Column, Alias):
     def __repr__(self):
         return Column.__repr__(self) + Alias.__repr__(self)
 
+# class ExpressionAlias(Alias):
+#     def __init__(self, )
 class Cond:
     def __init__(self, lhs, rhs):
         self.lhs = lhs

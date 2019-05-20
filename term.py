@@ -1276,7 +1276,7 @@ class Alpha(Operation):
         for arg in args:
             if arg.kind != 'element':
                 return False
-        if args[0].type.args[0] != args[1].type.args[0]:
+        if not args[0].type.args[0].equals(args[1].type.args[0]):
             return False
         return True
         

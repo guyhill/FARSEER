@@ -247,7 +247,43 @@ WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')\
 """ ], [
     Application(alpha, [inkomen, geslacht]),
 """\
-"""]
+""" ], [
+    Application(alpha, [eenpersoon, geslacht]),
+"""\
+""" ], [
+    Application(alpha, [
+        inkomen, 
+        Application(product, [ leeftijd, geslacht ])
+    ]),
+"""\
+""" ], [
+    Application(alpha, [
+        Application(composition, [
+            inkomen,
+            Application(inclusion, [
+                Application(composition, [ gemeentenaam, ligtin, woontop ]),
+                Application(composition, [ leiden, allepersonen ])        
+            ])
+        ]),
+        Application(composition, [
+            geslacht,
+            Application(inclusion, [
+                Application(composition, [ gemeentenaam, ligtin, woontop ]),
+                Application(composition, [ leiden, allepersonen ])        
+            ])
+        ])
+    ]),
+"""\
+""" ], [
+    Application(alpha, [inkomen, allepersonen]),
+"""\
+""" ], [
+    Application(product, [
+        Application(alpha, [ inkomen, geslacht ]),
+        Application(alpha, [ eenpersoon, geslacht ])
+    ]),
+"""\
+""" ]
 ]
 
 test_terms(terms)

@@ -123,8 +123,23 @@ class ColumnAlias(Column, Alias):
     def __repr__(self):
         return Column.__repr__(self) + Alias.__repr__(self)
 
-# class ExpressionAlias(Alias):
-#     def __init__(self, )
+class ExpressionAlias(Alias):
+    def __init__(self, args, alias, prefix = "", infix = ", "):
+        super().__init__(alias)
+        self.args = args
+        self.prefix = prefix
+        self.infix = infix
+
+    def __repr__(self):
+        if len(self.args) == 0:
+            result = ""
+        elif len(self.args) == 1 and self.prefix == "":
+            result = repr(self.args[0])
+        else:
+            argstr = self.infix.join([ repr(a) for a in self.args ])
+            result = self.prefix + "(" + argstr + ")" + super().__repr__()
+        return result
+
 class Cond:
     def __init__(self, lhs, rhs):
         self.lhs = lhs
@@ -265,7 +280,6 @@ def do_composition(qsts):
             joins.append(j)
 
         for c in selectscod:
-            #c.table = alias
             c.replace_table(joinfrm.table, alias)
 
     qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres))
@@ -280,7 +294,8 @@ def cmplproduct(args):
     frm = qsts[0].frm
     joins = [ j for q in qsts for j in q.joins ]
     wheres = [ w for q in qsts for w in q.wheres ]
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres)
+    groupbys = qsts[0].groupbys
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys)
     return qst
 
 def cmplinclusion(args):
@@ -312,11 +327,11 @@ def cmplaggregation(args):
     selectsdom = qsts[1].selectscod
     selectscod = []
     for s in qsts[0].selectscod:
-        selectscod.append(ColumnAlias(f"{s.table}", f"SUM({s.column})", ""))
+        selectscod.append(ExpressionAlias([s.get_column()], "", "SUM"))
     frm = qsts[0].frm
     joins = { j for j in qsts[0].joins + qsts[1].joins }
     wheres = { w for w in qsts[0].wheres + qsts[1].wheres }
-    groupbys = selectsdom
+    groupbys = [ s for s in selectsdom if s.table ]
     qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys)
     return qst
 

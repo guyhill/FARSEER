@@ -231,13 +231,13 @@ JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_o
 JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeente_id = persoon_woont_op.ligt_in)
 WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')\
 """ ], [
-    Application(composition, [
-        Application(product, [ inkomen, woontop ]),
-        Application(inclusion, [
-            Application(composition, [ gemeentenaam, ligtin, woontop ]),
-            Application(composition, [ leiden, allepersonen ])        
-        ])
-    ]),
+Application(composition, [
+    Application(product, [ inkomen, woontop ]),
+    Application(inclusion, [
+        Application(composition, [ gemeentenaam, ligtin, woontop ]),
+        Application(composition, [ leiden, allepersonen ])        
+    ])
+]),
 """\
 SELECT persoon.persoon_id, persoon.inkomen, persoon.woont_op
 FROM persoon
@@ -245,45 +245,66 @@ JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_o
 JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeente_id = persoon_woont_op.ligt_in)
 WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')\
 """ ], [
-    Application(alpha, [inkomen, geslacht]),
+Application(alpha, [inkomen, geslacht]),
 """\
 """ ], [
-    Application(alpha, [eenpersoon, geslacht]),
+Application(alpha, [eenpersoon, geslacht]),
 """\
 """ ], [
-    Application(alpha, [
-        inkomen, 
-        Application(product, [ leeftijd, geslacht ])
-    ]),
+Application(alpha, [
+    inkomen, 
+    Application(product, [ leeftijd, geslacht ])
+]),
 """\
 """ ], [
-    Application(alpha, [
-        Application(composition, [
-            inkomen,
-            Application(inclusion, [
-                Application(composition, [ gemeentenaam, ligtin, woontop ]),
-                Application(composition, [ leiden, allepersonen ])        
-            ])
-        ]),
-        Application(composition, [
-            geslacht,
-            Application(inclusion, [
-                Application(composition, [ gemeentenaam, ligtin, woontop ]),
-                Application(composition, [ leiden, allepersonen ])        
-            ])
+Application(alpha, [
+    Application(composition, [
+        inkomen,
+        Application(inclusion, [
+            Application(composition, [ gemeentenaam, ligtin, woontop ]),
+            Application(composition, [ leiden, allepersonen ])        
         ])
     ]),
+    Application(composition, [
+        geslacht,
+        Application(inclusion, [
+            Application(composition, [ gemeentenaam, ligtin, woontop ]),
+            Application(composition, [ leiden, allepersonen ])        
+        ])
+    ])
+]),
 """\
 """ ], [
-    Application(alpha, [inkomen, allepersonen]),
+Application(alpha, [inkomen, allepersonen]),
 """\
 """ ], [
-    Application(product, [
-        Application(alpha, [ inkomen, geslacht ]),
-        Application(alpha, [ eenpersoon, geslacht ])
+Application(product, [
+    Application(alpha, [ inkomen, geslacht ]),
+    Application(alpha, [ eenpersoon, geslacht ])
+]),
+"""\
+""" ], [
+Application(alpha, [ inkomen, 
+    Application(composition, [ ligtin, woontop ]) 
+]),
+"""\
+""" ], [
+Application(alpha, [ eenadres, ligtin ]),
+"""\
+""" ], [
+Application(product, [
+    Application(alpha, [ inkomen, 
+        Application(composition, [ ligtin, woontop ]) 
     ]),
+    Application(alpha, [ eenadres, ligtin ]),
+]),    
 """\
-""" ]
+""" ]#, [
+#Application(gedeelddoor, 
+#    Application(product, [ inkomen, leeftijd ])
+#),
+#"""\
+#""" ]
 ]
 
 test_terms(terms)

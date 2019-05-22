@@ -3,20 +3,6 @@ from kind import Variable, ObjectTypeRelation, Constant, Operator
 from dm import *
 from cmpl_new import cmpl
 
-def test_terms_old(terms, expected_output):
-    errors = False
-    for i, term in enumerate(terms):
-        cterm = cmpl(term)
-        output = repr(cterm)
-        if i >= len(expected_output) or expected_output[i] != output:
-            print(term)
-            print(cterm)
-            print()
-            if i < len(expected_output):
-                errors = True
-    if not errors:
-        print("all tests pass")
-
 def test_terms(terms):
     error = False
     for term in terms:
@@ -34,7 +20,6 @@ def test_terms(terms):
     if not error:
         print("all tests passed")
                 
-
 
 terms = [ 
 [   # object type relation
@@ -247,15 +232,24 @@ WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')\
 """ ], [
 Application(alpha, [inkomen, geslacht]),
 """\
+SELECT persoon.geslacht, SUM(persoon.inkomen)
+FROM persoon
+GROUP BY persoon.geslacht\
 """ ], [
 Application(alpha, [eenpersoon, geslacht]),
 """\
+SELECT persoon.geslacht, SUM(1)
+FROM persoon
+GROUP BY persoon.geslacht\
 """ ], [
 Application(alpha, [
     inkomen, 
     Application(product, [ leeftijd, geslacht ])
 ]),
 """\
+SELECT persoon.leeftijd, persoon.geslacht, SUM(persoon.inkomen)
+FROM persoon
+GROUP BY persoon.leeftijd, persoon.geslacht\
 """ ], [
 Application(alpha, [
     Application(composition, [
@@ -274,37 +268,69 @@ Application(alpha, [
     ])
 ]),
 """\
+SELECT persoon.geslacht, SUM(persoon.inkomen)
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeente_id = persoon_woont_op.ligt_in)
+WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')
+GROUP BY persoon.geslacht\
 """ ], [
 Application(alpha, [inkomen, allepersonen]),
 """\
+SELECT '*', SUM(persoon.inkomen)
+FROM persoon\
 """ ], [
 Application(product, [
     Application(alpha, [ inkomen, geslacht ]),
     Application(alpha, [ eenpersoon, geslacht ])
 ]),
 """\
+SELECT persoon.geslacht, SUM(persoon.inkomen), SUM(1)
+FROM persoon
+GROUP BY persoon.geslacht\
 """ ], [
-Application(alpha, [ inkomen, 
-    Application(composition, [ ligtin, woontop ]) 
+Application(composition, [
+    gedeelddoor,
+    Application(product, [
+        Application(alpha, [ inkomen, geslacht ]),
+        Application(alpha, [ eenpersoon, geslacht ])
+    ]),
 ]),
 """\
 """ ], [
-Application(alpha, [ eenadres, ligtin ]),
-"""\
-""" ], [
-Application(product, [
-    Application(alpha, [ inkomen, 
-        Application(composition, [ ligtin, woontop ]) 
-    ]),
-    Application(alpha, [ eenadres, ligtin ]),
+Application(composition, [
+    gedeelddoor,
+    Application(product, [
+        Application(alpha, [ inkomen, 
+            Application(composition, [ ligtin, woontop ]) 
+        ]),
+        Application(alpha, [ eenadres, ligtin ]),
+    ])
 ]),    
 """\
-""" ]#, [
-#Application(gedeelddoor, 
-#    Application(product, [ inkomen, leeftijd ])
-#),
-#"""\
-#""" ]
+""" ], [
+Application(composition, [
+    gedeelddoor, 
+    Application(product, [ inkomen, leeftijd ])
+]),
+"""\
+SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd)
+FROM persoon\
+""" ], [
+Application(composition, [
+    gedeelddoor, 
+    Application(product, [
+        Application(composition, [
+            gedeelddoor, 
+            Application(product, [ inkomen, leeftijd ])
+        ]),
+        leeftijd        
+    ])
+]),
+"""\
+SELECT persoon.persoon_id, ((persoon.inkomen / persoon.leeftijd) / persoon.leeftijd)
+FROM persoon\
+""" ]
 ]
 
-test_terms(terms)
+test_terms(terms[-6: -5])

@@ -6,7 +6,7 @@ Created on Mon Apr  8 07:55:59 2019
 @author: tgelsema
 """
 import re
-from copy import copy
+from copy import copy, deepcopy
 
 from term import *
 from kind import Variable, ObjectTypeRelation, Constant, Operator
@@ -20,6 +20,9 @@ class Name:
 
     def __bool__(self):
         return bool(repr(self))
+
+    def __eq__(self, other):
+        return self.name == other.name
 
     def __repr__(self):
         if isinstance(self.name, str):
@@ -123,6 +126,9 @@ class ColumnAlias(Column, Alias):
     def get_column(self):
         return Column(self.table, self.column)
 
+    def repr_column(self):
+        return Column.__repr__(self)
+
     def __repr__(self):
         return Column.__repr__(self) + Alias.__repr__(self)
 
@@ -177,9 +183,13 @@ class CondAlias(Cond, TableAlias):
         return f'({TableAlias.__repr__(self)}) ON {Cond.__repr__(self)}'
 
 class QStruct:    
-    def __init__(self, selectsdom, selectscod, frm, joins = [], wheres = [], groupbys = []): #### , create, orderbys):
-        #### self.create = create
-        self.frozen = None
+    def __init__(self, selectsdom, selectscod, frm, joins = None, wheres = None, groupbys = None, frozen_qsts = None):
+        joins = [] if joins is None else joins
+        wheres = [] if wheres is None else wheres
+        groupbys = [] if groupbys is None else groupbys
+        frozen_qsts = [] if frozen_qsts is None else frozen_qsts    
+
+        self.frozen_qsts = frozen_qsts
         self.selectsdom = selectsdom
         self.selectscod = selectscod
         self.frm = frm
@@ -212,16 +222,18 @@ class QStruct:
         tablename = f"tmp{table_num}"
         table_num += 1
 
+        frozen_qst = copy(self)
+        frozen_qst.tablename = tablename
         column_num = 0
-        self.frozen = copy(self)
-        for s in self.frozen.selectsdom + self.frozen.selectscod:
-            if not s.alias:
-                s.alias = f"col{column_num}"  
-                column_num += 1
+        for s in frozen_qst.selectsdom + frozen_qst.selectscod:
+            s.alias = f"col{column_num}"  
+            column_num += 1
+        frozen_qst.frozen_qsts = []
 
-        self.frm = tablename
-        self.selectsdom = [ Column(tablename, s.alias) for s in self.frozen.selectsdom ]
-        self.selectscod = [ Column(tablename, s.alias) for s in self.frozen.selectscod ]
+        self.frozen_qsts.append(frozen_qst)
+        self.frm = TableAlias(tablename, "")
+        self.selectsdom = [ ColumnAlias(tablename, s.alias, "") for s in frozen_qst.selectsdom ]
+        self.selectscod = [ ColumnAlias(tablename, s.alias, "") for s in frozen_qst.selectscod ]
         self.joins = []
         self.wheres = []
         self.groupbys = []
@@ -229,25 +241,26 @@ class QStruct:
         return self
 
     def __repr__(self):
-        if self.frozen != None:
-            sql = f"CREATE TEMPORARY TABLE {self.frm}\n" + repr(self.frozen)
-        else:
-            colspec = ""
-            for alias in self.selectsdom + self.selectscod:
-                if colspec:
-                    colspec += ", "
-                colspec += repr(alias)
-            joinstr = ""
-            for join in self.joins:
-                joinstr += f"\nJOIN {join}"
-            fromstr = f"\nFROM {self.frm}" if repr(self.frm) else ""
-            wherestr = ""
-            for where in self.wheres:
-                wherestr += f" AND {where}" if wherestr else f"\nWHERE {where}"
-            groupbystr = ""
-            for groupby in self.groupbys:
-                groupbystr += f", {groupby}" if groupbystr else f"\nGROUP BY {groupby}"
-            sql = f"SELECT {colspec}{fromstr}{joinstr}{wherestr}{groupbystr}"
+        sql = ""
+        for frozen_qst in self.frozen_qsts:
+            sql += f"CREATE TEMPORARY TABLE {frozen_qst.tablename}\n{frozen_qst}"
+
+        colspec = ""
+        for alias in self.selectsdom + self.selectscod:
+            if colspec:
+                colspec += ", "
+            colspec += repr(alias)
+        joinstr = ""
+        for join in self.joins:
+            joinstr += f"\nJOIN {join}"
+        fromstr = f"\nFROM {self.frm}" if repr(self.frm) else ""
+        wherestr = ""
+        for where in self.wheres:
+            wherestr += f" AND {where}" if wherestr else f"\nWHERE {where}"
+        groupbystr = ""
+        for groupby in self.groupbys:
+            groupbystr += f", {groupby}" if groupbystr else f"\nGROUP BY {groupby}"
+        sql += f"SELECT {colspec}{fromstr}{joinstr}{wherestr}{groupbystr}\n"
 
         return sql
 
@@ -256,10 +269,15 @@ class QOperator:
         self.prefix = prefix
         self.infix = infix
 
-def cmpl(term):
-    global tablenum
+def freeze_qsts(qsts):
 
-    tablenum = 0
+    for qst in qsts:
+        qst.freeze()
+
+def cmpl(term):
+    global table_num
+
+    table_num = 0
     return do_cmpl(term)
 
 def do_cmpl(term):
@@ -287,6 +305,9 @@ def cmplcomposition(args):
     qsts = []
     for arg in args:
         qsts.append(do_cmpl(arg))
+
+    freeze_qsts(qsts)
+
     return do_composition(qsts)
 
 def do_composition(qsts):
@@ -327,30 +348,46 @@ def do_composition(qsts):
             for c in selectscod:
                 c.replace_table(joinfrm.table, alias)
 
-    qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres))
+    frozen_qsts = [ f for q in [ rhs, lhs ] for f in q.frozen_qsts ]
+    qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts))
     return do_composition(qsts)
 
 def cmplproduct(args):
     qsts = []
     for arg in args:
         qsts.append(do_cmpl(arg))
+
+    freeze_qsts(qsts)
+
     selectsdom = qsts[0].selectsdom
+    joins = []
+    for qst in qsts[1:]:
+        if qst.selectsdom[0].table != selectsdom[0].table:
+            joins.append(CondAlias(qst.selectsdom[0].table, "", selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
     selectscod = [s for q in qsts for s in q.selectscod ]
     frm = qsts[0].frm
-    joins = [ j for q in qsts for j in q.joins ]
+    joins += [ j for q in qsts for j in q.joins ]
     wheres = [ w for q in qsts for w in q.wheres ]
     groupbys = qsts[0].groupbys
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys)
-    return qst + [ q for q in qsts if q.frozen ]
+    frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
+    return qst
 
 def cmplinclusion(args):
     qsts = []
     for arg in args:
         qsts.append(do_cmpl(arg))
+
+    freeze_qsts(qsts)
+
     selectsdom = qsts[0].selectsdom
-    selectscod = selectsdom
+    joins = []
+    for qst in qsts[1:]:
+        if qst.selectsdom[0].table != selectsdom[0].table:
+            joins.append(CondAlias(qst.selectsdom[0].table, "", selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
+    selectscod = deepcopy(selectsdom)
     frm = qsts[0].frm
-    joins = [ j for q in qsts for j in q.joins]
+    joins += [ j for q in qsts for j in q.joins]
     wheres = []
     for i, q in enumerate(qsts):
         if i % 2 == 0: # LHS of comparison
@@ -358,7 +395,8 @@ def cmplinclusion(args):
         else:
             rhs = q.selectscod[0]
             wheres.append(Cond(lhs, rhs))
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres)
+    frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts)
     return qst
 
 def cmplinverse(args):
@@ -369,15 +407,23 @@ def cmplaggregation(args):
     qsts = []
     for arg in args:
         qsts.append(do_cmpl(arg))
+
+    freeze_qsts(qsts)
+
     selectsdom = qsts[1].selectscod
+    joins = []
+    qst = qsts[0]
+    if qst.selectsdom[0].table != selectsdom[0].table:
+        joins.append(CondAlias(qst.selectsdom[0].table, "", qsts[1].selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
     selectscod = []
     for s in qsts[0].selectscod:
         selectscod.append(ExpressionAlias([s.get_column()], "", "SUM"))
-    frm = qsts[0].frm
-    joins = { j for j in qsts[0].joins + qsts[1].joins }
-    wheres = { w for w in qsts[0].wheres + qsts[1].wheres }
+    frm = qsts[1].frm
+    joins += [ j for j in qsts[0].joins + qsts[1].joins ]
+    wheres = [ w for w in qsts[0].wheres + qsts[1].wheres ]
     groupbys = [ s for s in selectsdom if s.table ]
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys).freeze()
+    frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
     return qst
 
 def cmplvariable(term):

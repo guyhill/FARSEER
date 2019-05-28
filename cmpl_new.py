@@ -16,7 +16,7 @@ table_num = 0
 
 class Name:
     def __init__(self, name):
-        self.name = name
+        self.name = f"{name}"
 
     def __bool__(self):
         return bool(repr(self))
@@ -223,7 +223,7 @@ class QStruct:
         table_num += 1
 
         frozen_qst = copy(self)
-        frozen_qst.tablename = tablename
+        frozen_qst.tablename = Name(tablename)
         column_num = 0
         for s in frozen_qst.selectsdom + frozen_qst.selectscod:
             s.alias = f"col{column_num}"  
@@ -239,6 +239,51 @@ class QStruct:
         self.groupbys = []
         
         return self
+
+    def replace_table(self, old_table, new_table):
+        for s in self.selectsdom + self.selectscod:
+            if s.table == old_table:
+                s.table = new_table
+        if self.frm.table == old_table:
+            self.frm.table = new_table
+        for j in self.joins:
+            if j.table == old_table:
+                j.table = new_table
+            if j.lhs.table == old_table:
+                j.lhs.table = new_table
+            if j.rhs.table == old_table:
+                j.rhs.table = new_table
+        for w in self.wheres:
+            if w.lhs.table == old_table:
+                w.lhs.table = new_table
+            if w.rhs.table == old_table:
+                w.rhs.table = new_table
+            
+    def dedup_frozen(self):
+        old_qsts = self.frozen_qsts
+        self.frozen_qsts = []
+        queries = []
+        for i, qst in enumerate(old_qsts):
+            query = repr(qst)
+            try:
+                j = queries.index(query)
+            except ValueError:        
+                # Query is not on the list of queries yet, therefore we must keep it
+                queries.append(query)
+                self.frozen_qsts.append(qst)
+                continue
+
+            # Query is the same as some other one already in the list of queries. We therefore
+            # don't need this query. We go through the remaining queries to rename all instances
+            # of the new query's tablename to the existing query's one.
+            cur_table = qst.tablename
+            rep_table = old_qsts[j].tablename
+
+            for qst in old_qsts[i:]:
+                qst.replace_table(cur_table, rep_table)
+        
+        return self
+
 
     def __repr__(self):
         sql = ""
@@ -278,7 +323,7 @@ def cmpl(term):
     global table_num
 
     table_num = 0
-    return do_cmpl(term)
+    return do_cmpl(term).dedup_frozen()
 
 def do_cmpl(term):
     if isinstance(term, Application):
@@ -335,10 +380,14 @@ def do_composition(qsts):
             if joincod == joindom:
                 alias = Name(f"{joincod.table}")
             else:
-                alias = Name(f"{joincod.table}_{joincod.column}")
+                if f"{joinfrm.table}"[0:3] == "tmp":
+                    alias = joinfrm.table
+                    joinfrm.alias = ""
+                else:
+                    alias = Name(f"{joincod.table}_{joincod.column}")
+                    joinfrm.alias = alias
+                    joindom.table = alias
 
-                joinfrm.alias = alias
-                joindom.table = alias
                 joins.append(CondAlias(joinfrm.table, joinfrm.alias, joindom, joincod))
 
             for j in lhs.joins:

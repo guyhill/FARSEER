@@ -4,6 +4,7 @@
 Created on Mon Apr  8 07:55:59 2019
 
 @author: tgelsema
+@author: Guido van den Heuvel
 """
 import re
 from copy import copy, deepcopy
@@ -12,7 +13,24 @@ from term import *
 from kind import Variable, ObjectTypeRelation, Constant, Operator
 from dm import *
 
+# global variable
 table_num = 0
+
+# Two constants that determine how aggressive query optimization is
+
+# If FREEZE_ALL is True, all intermediate queries are frozen. This means
+# that a new temporary table is generated for each operation.
+# If FREEZE_ALL is False, queries remain unfrozen as long as is feasible.
+# This tends to lead to fewer queries and therefore, likely faster execution. 
+# Currently all aggregation subqueries are frozen, and all others aren't.
+FREEZE_ALL = False    
+
+# If DEDUP_FROZEN is False, frozen queries are not deduplicated. Duplicate
+# frozen queries arise naturally when the same sub-expression is present
+# multiple times.
+# If DEDUP_FROZEN is True, identical frozen queries are deduplicated, which
+# leads to faster execution times.
+DEDUP_FROZEN = True
 
 class Name:
     def __init__(self, name):
@@ -260,6 +278,9 @@ class QStruct:
                 w.rhs.table = new_table
             
     def dedup_frozen(self):
+        if not DEDUP_FROZEN:
+            return self
+
         old_qsts = self.frozen_qsts
         self.frozen_qsts = []
         queries = []
@@ -317,7 +338,8 @@ class QOperator:
 def freeze_qsts(qsts):
 
     for qst in qsts:
-        qst.freeze()
+        if FREEZE_ALL or isinstance(qst, QStruct) and qst.groupbys:
+            qst.freeze()
 
 def cmpl(term):
     global table_num
@@ -369,6 +391,7 @@ def do_composition(qsts):
 
     if isinstance(lhs, QOperator):
         selectscod = [ ExpressionAlias(rhs.selectscod, prefix = lhs.prefix, infix = lhs.infix) ]
+        frozen_qsts = [ f for q in [ rhs ] for f in q.frozen_qsts ]
     else:
         selectscod = lhs.selectscod
         wheres = lhs.wheres + wheres
@@ -397,7 +420,7 @@ def do_composition(qsts):
             for c in selectscod:
                 c.replace_table(joinfrm.table, alias)
 
-    frozen_qsts = [ f for q in [ rhs, lhs ] for f in q.frozen_qsts ]
+        frozen_qsts = [ f for q in [ rhs, lhs ] for f in q.frozen_qsts ]
     qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts))
     return do_composition(qsts)
 
@@ -462,7 +485,7 @@ def cmplaggregation(args):
     selectsdom = qsts[1].selectscod
     joins = []
     qst = qsts[0]
-    if qst.selectsdom[0].table != selectsdom[0].table:
+    if qst.selectsdom[0].table and selectsdom[0].table and qst.selectsdom[0].table != selectsdom[0].table:
         joins.append(CondAlias(qst.selectsdom[0].table, "", qsts[1].selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
     selectscod = []
     for s in qsts[0].selectscod:
@@ -470,7 +493,7 @@ def cmplaggregation(args):
     frm = qsts[1].frm
     joins += [ j for j in qsts[0].joins + qsts[1].joins ]
     wheres = [ w for w in qsts[0].wheres + qsts[1].wheres ]
-    groupbys = [ s for s in selectsdom if s.table ]
+    groupbys = [ s.get_column() for s in selectsdom if s.table ]
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
     qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
     return qst

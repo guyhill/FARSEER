@@ -23,7 +23,7 @@ table_num = 0
 # If FREEZE_ALL is False, queries remain unfrozen as long as is feasible.
 # This tends to lead to fewer queries and therefore, likely faster execution. 
 # Currently all aggregation subqueries are frozen, and all others aren't.
-FREEZE_ALL = False    
+FREEZE_ALL = True    
 
 # If DEDUP_FROZEN is False, frozen queries are not deduplicated. Duplicate
 # frozen queries arise naturally when the same sub-expression is present
@@ -302,7 +302,7 @@ class QStruct:
 
             for qst in old_qsts[i:]:
                 qst.replace_table(cur_table, rep_table)
-        
+
         return self
 
 
@@ -359,6 +359,8 @@ def do_cmpl(term):
             return cmplinverse(term.args)
         elif term.op == alpha:
             return cmplaggregation(term.args)
+        elif term.op == projection:
+            return cmplprojection(term.args)
     elif isinstance(term, Variable):
         return cmplvariable(term)
     elif isinstance(term, ObjectTypeRelation):
@@ -497,6 +499,9 @@ def cmplaggregation(args):
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
     qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
     return qst
+
+def cmplprojection(args):
+    return QStruct([], [], [])
 
 def cmplvariable(term):
     if term.codomain == one or term.name[:3] == "een":

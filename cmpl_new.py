@@ -23,7 +23,7 @@ table_num = 0
 # If FREEZE_ALL is False, queries remain unfrozen as long as is feasible.
 # This tends to lead to fewer queries and therefore, likely faster execution. 
 # Currently all aggregation subqueries are frozen, and all others aren't.
-FREEZE_ALL = True    
+FREEZE_ALL = False    
 
 # If DEDUP_FROZEN is False, frozen queries are not deduplicated. Duplicate
 # frozen queries arise naturally when the same sub-expression is present
@@ -201,11 +201,12 @@ class CondAlias(Cond, TableAlias):
         return f'({TableAlias.__repr__(self)}) ON {Cond.__repr__(self)}'
 
 class QStruct:    
-    def __init__(self, selectsdom, selectscod, frm, joins = None, wheres = None, groupbys = None, frozen_qsts = None):
+    def __init__(self, selectsdom, selectscod, frm, joins = None, wheres = None, groupbys = None, frozen_qsts = None, distinct = None):
         joins = [] if joins is None else joins
         wheres = [] if wheres is None else wheres
         groupbys = [] if groupbys is None else groupbys
         frozen_qsts = [] if frozen_qsts is None else frozen_qsts    
+        distinct = False if distinct is None else distinct
 
         self.frozen_qsts = frozen_qsts
         self.selectsdom = selectsdom
@@ -218,6 +219,7 @@ class QStruct:
         for w in wheres:
             self.add_where(w)
         self.groupbys = groupbys
+        self.distinct = distinct
         #### self.orderbys = orderbys
 
     def add_join(self, new_join):
@@ -326,7 +328,9 @@ class QStruct:
         groupbystr = ""
         for groupby in self.groupbys:
             groupbystr += f", {groupby}" if groupbystr else f"\nGROUP BY {groupby}"
-        sql += f"SELECT {colspec}{fromstr}{joinstr}{wherestr}{groupbystr}\n"
+        distinctstr = "DISTINCT " if self.distinct else ""
+
+        sql += f"SELECT {distinctstr}{colspec}{fromstr}{joinstr}{wherestr}{groupbystr}\n"
 
         return sql
 
@@ -474,7 +478,20 @@ def cmplinclusion(args):
     return qst
 
 def cmplinverse(args):
-    qst = QStruct(None, None, None, None, None)
+    qsts = []
+    for arg in args:
+        qsts.append(do_cmpl(arg))
+
+    freeze_qsts(qsts)
+
+    selectsdom = qsts[0].selectscod
+    selectscod = qsts[0].selectscod
+    frm = qsts[0].frm
+    joins = qsts[0].joins
+    wheres = qsts[0].wheres
+    frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
+
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts, True)
     return qst
 
 def cmplaggregation(args):

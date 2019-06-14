@@ -5,11 +5,11 @@ from cmpl_new import cmpl
 
 def test_terms(terms):
     error = False
-    for term in terms:
+    for i, term in enumerate(terms):
         output = repr(cmpl(term[0]))
         expected = term[1]
         if output != expected:
-            msg = ("======test failed===========\n" +
+            msg = (f"======test {i} failed===========\n" +
                   repr(term[0]) + "\n\n" +
                   "Output:\n" +
                   output + "\n\n" +
@@ -331,7 +331,12 @@ FROM persoon
     """\
 SELECT persoon.persoon_id, ((persoon.inkomen / persoon.leeftijd) / persoon.leeftijd)
 FROM persoon
+""" ], [
+    Application(inverse, [
+        werknemer
+    ]),
+    """\
 """ ]
-    ]
+]
 
     test_terms(terms)

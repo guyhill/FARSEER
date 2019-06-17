@@ -336,6 +336,34 @@ FROM persoon
         werknemer
     ]),
     """\
+""" ], [
+    Application(alpha, [
+        Application(composition, [
+            eenpersoon,
+            Application(inverse, [
+                Application(composition, [
+                    werknemer,
+                    Application(inclusion, [
+                        Application(composition, [ gemeentenaam, ligtin, woontop, werknemer ]),
+                        Application(composition, [ denhaag, allebanen ])
+                    ])
+                ])
+            ])
+        ]),
+        Application(composition, [
+            allepersonen,
+            Application(inverse, [
+                Application(composition, [
+                    werknemer,
+                    Application(inclusion, [
+                        Application(composition, [ gemeentenaam, ligtin, woontop, werknemer ]),
+                        Application(composition, [ denhaag, allebanen ])
+                    ])
+                ])
+            ])
+        ])
+    ]),
+    """\
 """ ]
 ]
 

@@ -88,6 +88,10 @@ class TableAlias(Alias):
     def replace_alias(self, table, alias):
         self.alias = Name(repr(self.alias).replace(repr(table), repr(alias), 1))
 
+    def substitute_table(self, old, new):
+        if self.table == old:
+            self.table = new
+
     def __repr__(self):
         if repr(self.table) == repr(self.alias):
             return repr(self.table)
@@ -115,12 +119,12 @@ class Column:
             self.table = Name(repr(prefix) + "_" + repr(self.table))
         return self.table
 
-    # def replace_table(self, table):
-    #     if self.table:
-    #         self.table = Name(table)
-
     def replace_table(self, table, alias):
         self.table = Name(repr(self.table).replace(repr(table), repr(alias), 1))
+
+    def substitute_table(self, old, new):
+        if self.table == old:
+            self.table = new
 
     def __eq__(self, other):
         return repr(self) == repr(other)
@@ -167,6 +171,10 @@ class ExpressionAlias(Alias):
             result = self.prefix + "(" + argstr + ")" + super().__repr__()
         return result
 
+    def substitute_table(self, old, new):
+        for arg in self.args:
+            arg.substitute_table(old, new)
+
 class Cond:
     def __init__(self, lhs, rhs):
         self.lhs = lhs
@@ -179,6 +187,10 @@ class Cond:
     def replace_tables(self, table, alias):
         self.lhs.replace_table(table, alias)
         self.rhs.replace_table(table, alias)
+
+    def substitute_table(self, old, new):
+        self.lhs.substitute_table(old, new)
+        self.rhs.substitute_table(old, new)
 
     def __repr__(self):
         return f'({self.lhs} = {self.rhs})'
@@ -196,6 +208,10 @@ class CondAlias(Cond, TableAlias):
     def replace_alias(self, table, alias):
         Cond.replace_tables(self, table, alias)
         TableAlias.replace_alias(self, table, alias)
+
+    def substitute_table(self, old, new):
+        Cond.substitute_table(self, old, new)
+        TableAlias.substitute_table(self, old, new)
 
     def __repr__(self):
         return f'({TableAlias.__repr__(self)}) ON {Cond.__repr__(self)}'
@@ -260,10 +276,11 @@ class QStruct:
         
         return self
 
-    def replace_table(self, old_table, new_table):
+    def substitute_table(self, old_table, new_table):
         for s in self.selectsdom + self.selectscod:
-            if s.table == old_table:
-                s.table = new_table
+            s.substitute_table(old_table, new_table)
+            # if s.table == old_table:
+            #     s.table = new_table
         if self.frm.table == old_table:
             self.frm.table = new_table
         for j in self.joins:
@@ -302,9 +319,9 @@ class QStruct:
             cur_table = qst.tablename
             rep_table = old_qsts[j].tablename
 
-            for qst in old_qsts[i:]:
-                qst.replace_table(cur_table, rep_table)
-
+            for qst in old_qsts[i+1:]:
+                qst.substitute_table(cur_table, rep_table)
+            self.substitute_table(cur_table, rep_table)
         return self
 
 
@@ -342,7 +359,7 @@ class QOperator:
 def freeze_qsts(qsts):
 
     for qst in qsts:
-        if FREEZE_ALL or isinstance(qst, QStruct) and qst.groupbys:
+        if FREEZE_ALL or isinstance(qst, QStruct) and (qst.groupbys or qst.distinct):
             qst.freeze()
 
 def cmpl(term):
@@ -484,8 +501,8 @@ def cmplinverse(args):
 
     freeze_qsts(qsts)
 
-    selectsdom = qsts[0].selectscod
-    selectscod = qsts[0].selectscod
+    selectsdom = deepcopy(qsts[0].selectscod)
+    selectscod = deepcopy(qsts[0].selectscod)
     frm = qsts[0].frm
     joins = qsts[0].joins
     wheres = qsts[0].wheres
@@ -503,9 +520,9 @@ def cmplaggregation(args):
 
     selectsdom = qsts[1].selectscod
     joins = []
-    qst = qsts[0]
-    if qst.selectsdom[0].table and selectsdom[0].table and qst.selectsdom[0].table != selectsdom[0].table:
-        joins.append(CondAlias(qst.selectsdom[0].table, "", qsts[1].selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
+
+    if qsts[0].selectsdom[0].table and qsts[1].selectsdom[0].table and qsts[0].selectsdom[0].table != qsts[1].selectsdom[0].table:
+        joins.append(CondAlias(qsts[0].selectsdom[0].table, "", qsts[0].selectsdom[0].get_column(), qsts[1].selectsdom[0].get_column()))
     selectscod = []
     for s in qsts[0].selectscod:
         selectscod.append(ExpressionAlias([s.get_column()], "", "SUM"))

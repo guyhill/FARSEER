@@ -69,6 +69,7 @@ eengemeente = Variable(name='een', domain=gemeente, codomain=getal)
 eenbaan = Variable(name='een', domain=baan, codomain=getal)
 eenbedrijf = Variable(name='een', domain=bedrijf, codomain=getal)
 allepersonen = Variable(name='alle(persoon)', domain=persoon, codomain=one)
+allebanen = Variable(name='alle(baan)', domain=baan, codomain=one)
 
 # constants
 # cities

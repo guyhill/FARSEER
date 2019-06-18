@@ -3,12 +3,12 @@ from kind import Variable, ObjectTypeRelation, Constant, Operator
 from dm import *
 from cmpl_new import cmpl
 
-def test_terms(terms):
+def test_terms(terms, showall = False):
     error = False
     for i, term in enumerate(terms):
         output = repr(cmpl(term[0]))
         expected = term[1]
-        if output != expected:
+        if showall or output != expected:
             msg = (f"======test {i} failed===========\n" +
                   repr(term[0]) + "\n\n" +
                   "Output:\n" +
@@ -243,6 +243,16 @@ SELECT persoon.geslacht, SUM(1)
 FROM persoon
 GROUP BY persoon.geslacht
 """ ], [
+    Application(alpha, [inkomen, allepersonen]),
+    """\
+SELECT '*', SUM(persoon.inkomen)
+FROM persoon
+""" ], [
+    Application(alpha, [eenpersoon, allepersonen]),
+    """\
+SELECT '*', SUM(1)
+FROM persoon
+"""], [
     Application(alpha, [
         inkomen, 
         Application(product, [ leeftijd, geslacht ])
@@ -275,11 +285,6 @@ JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_o
 JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeente_id = persoon_woont_op.ligt_in)
 WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')
 GROUP BY persoon.geslacht
-""" ], [
-    Application(alpha, [inkomen, allepersonen]),
-    """\
-SELECT '*', SUM(persoon.inkomen)
-FROM persoon
 """ ], [
     Application(product, [
         Application(alpha, [ inkomen, geslacht ]),
@@ -363,6 +368,26 @@ FROM persoon
             ])
         ])
     ]),
+    """\
+""" ], [
+    Application(composition, [
+        eenpersoon,
+        Application(inverse, [
+            Application(composition, [
+                werknemer,
+                Application(inclusion, [
+                    Application(composition, [ gemeentenaam, ligtin, woontop, werknemer ]),
+                    Application(composition, [ denhaag, allebanen ])
+                ])
+            ])
+        ])
+    ]),
+    """\
+""" ], [
+    Application(composition, [ eenpersoon, werknemer ]),
+    """\
+""" ], [
+    eenbaan,
     """\
 """ ]
 ]

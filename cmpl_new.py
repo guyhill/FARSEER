@@ -240,8 +240,10 @@ class QStruct:
 
     def add_join(self, new_join):
         for join in self.joins:
-            if repr(join) == repr(new_join): # Code for new join already in existing joins
-                break                        # therefore the new join can be omitted
+            if join.table == new_join.table and join.lhs.column == new_join.lhs.column and repr(join.rhs) == repr(new_join.rhs):
+                break
+            if repr(join) == repr(new_join):            # Code for new join already in existing joins
+                break                                   # therefore the new join can be omitted
         else:
             self.joins.append(new_join)
 
@@ -279,17 +281,24 @@ class QStruct:
     def substitute_table(self, old_table, new_table):
         for s in self.selectsdom + self.selectscod:
             s.substitute_table(old_table, new_table)
-            # if s.table == old_table:
-            #     s.table = new_table
         if self.frm.table == old_table:
             self.frm.table = new_table
-        for j in self.joins:
+        old_joins = self.joins
+        self.joins = []
+        for j in old_joins:
             if j.table == old_table:
                 j.table = new_table
             if j.lhs.table == old_table:
                 j.lhs.table = new_table
             if j.rhs.table == old_table:
                 j.rhs.table = new_table
+            add_join = True
+            for j2 in self.joins:
+                if j.table == j2.table and j.lhs.column == j2.lhs.column and repr(j.rhs) == repr(j2.rhs):
+                    add_join = False
+                    break
+            if add_join and repr(j.lhs) != repr(j.rhs):
+                self.joins.append(j)
         for w in self.wheres:
             if w.lhs.table == old_table:
                 w.lhs.table = new_table
@@ -359,7 +368,7 @@ class QOperator:
 def freeze_qsts(qsts):
 
     for qst in qsts:
-        if FREEZE_ALL or isinstance(qst, QStruct) and (qst.groupbys or qst.distinct):
+        if isinstance(qst, QStruct) and (FREEZE_ALL or qst.groupbys or qst.distinct):
             qst.freeze()
 
 def cmpl(term):

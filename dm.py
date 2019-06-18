@@ -63,11 +63,11 @@ baanbedrijfid = Variable(name='werkgever', domain=baan, codomain=persoon)
 bedrijfadresid = Variable(name='gevestigd_op', domain=bedrijf, codomain=adres)
 
 # nice to haves
-eenpersoon = Variable(name='een', domain=persoon, codomain=getal)
-eenadres = Variable(name='een', domain=adres, codomain=getal)
-eengemeente = Variable(name='een', domain=gemeente, codomain=getal)
-eenbaan = Variable(name='een', domain=baan, codomain=getal)
-eenbedrijf = Variable(name='een', domain=bedrijf, codomain=getal)
+eenpersoon = Variable(name='een(persoon)', domain=persoon, codomain=getal)
+eenadres = Variable(name='een(adres)', domain=adres, codomain=getal)
+eengemeente = Variable(name='een(gemeente)', domain=gemeente, codomain=getal)
+eenbaan = Variable(name='een(baan)', domain=baan, codomain=getal)
+eenbedrijf = Variable(name='een(bedrijf)', domain=bedrijf, codomain=getal)
 allepersonen = Variable(name='alle(persoon)', domain=persoon, codomain=one)
 allebanen = Variable(name='alle(baan)', domain=baan, codomain=one)
 

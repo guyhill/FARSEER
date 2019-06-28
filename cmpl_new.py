@@ -43,42 +43,19 @@ class Name:
         return self.name == other.name
 
     def __repr__(self):
-        if isinstance(self.name, str):
-            return self.name
-        return repr(self.name)
+        return self.name
 
-def testName():
-    a = Name("Guido")
-    print(a)
-    print(bool(a))
-    b = Name("")
-    print(bool(b))
 
 class Alias:
     def __init__(self, alias):
         self.alias = Name(alias)
         
-    def get_alias(self):
-        return repr(self.alias)
-
-    def append_prefix(self, prefix):
-        if repr(prefix):
-            self.alias = Name(repr(prefix) + "_" + self.get_alias())
-        return self.get_alias()
-
     def __repr__(self):
         return f" AS {self.alias}" if self.alias else ""
 
-def testAlias():
-    x = Alias("Guido")
-    print(x)
-    y = Alias("")
-    print(y)
-    x.append_prefix("test")
-    print(x)
 
 class TableAlias(Alias):
-    def __init__(self, table, alias):
+    def __init__(self, table, alias = ""):
         self.table = Name(table)
         Alias.__init__(self, alias)
 
@@ -93,31 +70,15 @@ class TableAlias(Alias):
             self.table = new
 
     def __repr__(self):
-        if repr(self.table) == repr(self.alias):
+        if not self.alias or repr(self.table) == repr(self.alias):
             return repr(self.table)
         return f"{self.table}" + Alias.__repr__(self) if self.table else ""
     
-def testTableAlias():
-    print("testTableAlias")
-    x = TableAlias("tblPersoon", "A")
-    print(x)
-    print(x.get_alias())
-    z = TableAlias("tblPersoon", "")
-    print(z.get_alias())
-    y = TableAlias("", "B")
-    print(y)
-    w = TableAlias("X", "X")
-    print(w)
 
 class Column:
     def __init__(self, table, column):
         self.table = Name(table)
         self.column = Name(column)
-
-    def append_prefix(self, prefix):
-        if repr(prefix):
-            self.table = Name(repr(prefix) + "_" + repr(self.table))
-        return self.table
 
     def replace_table(self, table, alias):
         self.table = Name(repr(self.table).replace(repr(table), repr(alias), 1))
@@ -132,13 +93,6 @@ class Column:
     def __repr__(self):
         return f"{self.table}.{self.column}" if self.table else f"{self.column}"
 
-def testColumn():
-    x = Column("tblPersoon", "leeftijd")
-    print(x)
-    y = Column("", "'Leiden'")
-    print(y)
-    x.append_prefix("test")
-    print(x)
 
 class ColumnAlias(Column, Alias):
     def __init__(self, table, column, alias):
@@ -148,11 +102,9 @@ class ColumnAlias(Column, Alias):
     def get_column(self):
         return Column(self.table, self.column)
 
-    def repr_column(self):
-        return Column.__repr__(self)
-
     def __repr__(self):
         return Column.__repr__(self) + Alias.__repr__(self)
+
 
 class ExpressionAlias(Alias):
     def __init__(self, args, alias = "", prefix = "", infix = ", "):
@@ -165,7 +117,7 @@ class ExpressionAlias(Alias):
         if len(self.args) == 0:
             result = ""
         elif len(self.args) == 1 and self.prefix == "":
-            result = repr(self.args[0])
+            result = repr(self.args[0]) + super().__repr__()
         else:
             argstr = self.infix.join([ repr(a) for a in self.args ])
             result = self.prefix + "(" + argstr + ")" + super().__repr__()
@@ -175,15 +127,12 @@ class ExpressionAlias(Alias):
         for arg in self.args:
             arg.substitute_table(old, new)
 
+
 class Cond:
     def __init__(self, lhs, rhs):
         self.lhs = lhs
         self.rhs = rhs
         
-    def append_prefix(self, prefix):
-        self.lhs.append_prefix(prefix)
-        self.rhs.append_prefix(prefix)
-
     def replace_tables(self, table, alias):
         self.lhs.replace_table(table, alias)
         self.rhs.replace_table(table, alias)
@@ -194,16 +143,12 @@ class Cond:
 
     def __repr__(self):
         return f'({self.lhs} = {self.rhs})'
-            
+
+
 class CondAlias(Cond, TableAlias):
     def __init__(self, table, alias, lhs, rhs):
         TableAlias.__init__(self, table, alias)
         Cond.__init__(self, lhs, rhs)
-
-    def append_prefix(self, prefix):
-        Cond.append_prefix(self, prefix)
-        new_alias = TableAlias.append_prefix(self, prefix)
-        return new_alias
 
     def replace_alias(self, table, alias):
         Cond.replace_tables(self, table, alias)
@@ -217,7 +162,7 @@ class CondAlias(Cond, TableAlias):
         return f'({TableAlias.__repr__(self)}) ON {Cond.__repr__(self)}'
 
 class QStruct:    
-    def __init__(self, selectsdom, selectscod, frm, joins = None, wheres = None, groupbys = None, frozen_qsts = None, distinct = None):
+    def __init__(self, selectsdom, selectscod, frm, joins = None, wheres = None, groupbys = None, frozen_qsts = None, distinct = None, orderby = None, orderdir = ""):
         joins = [] if joins is None else joins
         wheres = [] if wheres is None else wheres
         groupbys = [] if groupbys is None else groupbys
@@ -236,8 +181,9 @@ class QStruct:
             self.add_where(w)
         self.groupbys = groupbys
         self.distinct = distinct
-        #### self.orderbys = orderbys
-
+        self.orderby = orderby
+        self.orderdir = orderdir
+        
     def add_join(self, new_join):
         for join in self.joins:
             if join.table == new_join.table and join.lhs.column == new_join.lhs.column and repr(join.rhs) == repr(new_join.rhs):
@@ -264,12 +210,15 @@ class QStruct:
         frozen_qst.tablename = Name(tablename)
         column_num = 0
         for s in frozen_qst.selectsdom + frozen_qst.selectscod:
-            s.alias = f"col{column_num}"  
+            if not s.alias:
+                s.alias = Name(f"col{column_num}")
             column_num += 1
         frozen_qst.frozen_qsts = []
+        frozen_qst.orderby = None
+        frozen_qst.orderdir = ""
 
         self.frozen_qsts.append(frozen_qst)
-        self.frm = TableAlias(tablename, "")
+        self.frm = TableAlias(tablename)
         self.selectsdom = [ ColumnAlias(tablename, s.alias, "") for s in frozen_qst.selectsdom ]
         self.selectscod = [ ColumnAlias(tablename, s.alias, "") for s in frozen_qst.selectscod ]
         self.joins = []
@@ -354,9 +303,13 @@ class QStruct:
         groupbystr = ""
         for groupby in self.groupbys:
             groupbystr += f", {groupby}" if groupbystr else f"\nGROUP BY {groupby}"
+        orderbystr = ""
+        if self.orderby is not None:
+            orderdir = "DESC" if self.orderdir == "desc" else "ASC"
+            orderbystr = f"\nORDER BY {self.orderby} {orderdir} LIMIT 5"
         distinctstr = "DISTINCT " if self.distinct else ""
 
-        sql += f"SELECT {distinctstr}{colspec}{fromstr}{joinstr}{wherestr}{groupbystr}\n"
+        sql += f"SELECT {distinctstr}{colspec}{fromstr}{joinstr}{wherestr}{groupbystr}{orderbystr}\n"
 
         return sql
 
@@ -365,51 +318,60 @@ class QOperator:
         self.prefix = prefix
         self.infix = infix
 
+""" class QProjection:
+    contains the data necessary for the projection operator. Projection selects one of the 
+    dimensions of the co-domain of a term with a multi-dimensional co-domain.
+    Since the dimension provided by the projection operator is 1-based, while Python is
+    zero-based, we convert the dimension to zero-based here."""
+class QProjection:
+    def __init__(self, dimension):
+        self.dimension = dimension - 1
+
 def freeze_qsts(qsts):
 
     for qst in qsts:
         if isinstance(qst, QStruct) and (FREEZE_ALL or qst.groupbys or qst.distinct):
             qst.freeze()
 
-def cmpl(term):
+def cmpl(term, var = None, order = ""):
     global table_num
 
     table_num = 0
-    return do_cmpl(term).dedup_frozen()
+    return do_cmpl(term, var, order).dedup_frozen()
 
-def do_cmpl(term):
+def do_cmpl(term, var, order):
     if isinstance(term, Application):
         if term.op == composition:
-            return cmplcomposition(term.args)
+            return cmplcomposition(term.args, var, order)
         elif term.op == product:
-            return cmplproduct(term.args)
+            return cmplproduct(term.args, var, order)
         elif term.op == inclusion:
-            return cmplinclusion(term.args)
+            return cmplinclusion(term.args, var, order)
         elif term.op == inverse:
-            return cmplinverse(term.args)
+            return cmplinverse(term.args, var, order)
         elif term.op == alpha:
-            return cmplaggregation(term.args)
+            return cmplaggregation(term.args, var, order)
         elif term.op == projection:
-            return cmplprojection(term.args)
+            return cmplprojection(term.args, var, order)
     elif isinstance(term, Variable):
-        return cmplvariable(term)
+        return cmplvariable(term, var, order)
     elif isinstance(term, ObjectTypeRelation):
-        return cmplobjecttyperelation(term)
+        return cmplobjecttyperelation(term, var, order)
     elif isinstance(term, Constant):
-        return cmplconstant(term)
+        return cmplconstant(term, var, order)
     elif isinstance(term, Operator):
-        return cmploperator(term)
+        return cmploperator(term, var, order)
 
-def cmplcomposition(args):
+def cmplcomposition(args, var, order):
     qsts = []
     for arg in args:
-        qsts.append(do_cmpl(arg))
+        qsts.append(do_cmpl(arg, var, order))
 
     freeze_qsts(qsts)
 
-    return do_composition(qsts)
+    return do_composition(qsts, var, order)
 
-def do_composition(qsts):
+def do_composition(qsts, var, order):
     if len(qsts) == 1:
         return qsts[0]
 
@@ -420,10 +382,28 @@ def do_composition(qsts):
     frm = rhs.frm
     joins = rhs.joins
     wheres = rhs.wheres
+    orderby = rhs.orderby
+    orderdir = rhs.orderdir
 
     if isinstance(lhs, QOperator):
-        selectscod = [ ExpressionAlias(rhs.selectscod, prefix = lhs.prefix, infix = lhs.infix) ]
+        alias = ""
+        args = deepcopy(rhs.selectscod) # We can assume args is a two-item list
+        if orderby is not None:
+            if args[0].alias == Name("key"):
+                alias = Name("key")
+                args[0].alias = ""
+            elif args[1].alias == Name("key"):
+                alias = Name("key")
+                args[1].alias = ""
+                orderdir = "desc" if orderdir == "asc" else "desc"
+        selectscod = [ ExpressionAlias(args, alias = alias, prefix = lhs.prefix, infix = lhs.infix) ]
         frozen_qsts = [ f for q in [ rhs ] for f in q.frozen_qsts ]
+    elif isinstance(lhs, QProjection):
+        selectscod = rhs.selectscod[lhs.dimension:lhs.dimension + 1]
+        frozen_qsts = [ f for q in [ rhs ] for f in q.frozen_qsts ]
+        if selectscod[0].alias != Name("key"):  # This should not occur - we only order by columns actually selected
+            orderby = None
+            orderdir = ""
     else:
         selectscod = lhs.selectscod
         wheres = lhs.wheres + wheres
@@ -453,13 +433,16 @@ def do_composition(qsts):
                 c.replace_table(joinfrm.table, alias)
 
         frozen_qsts = [ f for q in [ rhs, lhs ] for f in q.frozen_qsts ]
-    qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts))
-    return do_composition(qsts)
+        if lhs.orderby is not None:
+            orderby = lhs.orderby
+            orderdir = lhs.orderdir
+    qsts.append(QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts, None, orderby, orderdir))
+    return do_composition(qsts, var, order)
 
-def cmplproduct(args):
+def cmplproduct(args, var, order):
     qsts = []
     for arg in args:
-        qsts.append(do_cmpl(arg))
+        qsts.append(do_cmpl(arg, var, order))
 
     freeze_qsts(qsts)
 
@@ -474,13 +457,20 @@ def cmplproduct(args):
     wheres = [ w for q in qsts for w in q.wheres ]
     groupbys = qsts[0].groupbys
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
+    orderby = None
+    orderdir = ""
+    for qst in qsts:
+        if qst.orderby is not None:
+            orderby = qst.orderby
+            orderdir = qst.orderdir
+
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts, None, orderby, orderdir)
     return qst
 
-def cmplinclusion(args):
+def cmplinclusion(args, var, order):
     qsts = []
     for arg in args:
-        qsts.append(do_cmpl(arg))
+        qsts.append(do_cmpl(arg, var, order))
 
     freeze_qsts(qsts)
 
@@ -503,10 +493,10 @@ def cmplinclusion(args):
     qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts)
     return qst
 
-def cmplinverse(args):
+def cmplinverse(args, var, order):
     qsts = []
     for arg in args:
-        qsts.append(do_cmpl(arg))
+        qsts.append(do_cmpl(arg, var, order))
 
     freeze_qsts(qsts)
 
@@ -516,14 +506,16 @@ def cmplinverse(args):
     joins = qsts[0].joins
     wheres = qsts[0].wheres
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
+    orderby = qsts[0].orderby
+    orderdir = qsts[0].orderdir
 
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts, True)
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts, True, orderby, orderdir)
     return qst
 
-def cmplaggregation(args):
+def cmplaggregation(args, var, order):
     qsts = []
     for arg in args:
-        qsts.append(do_cmpl(arg))
+        qsts.append(do_cmpl(arg, var, order))
 
     freeze_qsts(qsts)
 
@@ -534,31 +526,27 @@ def cmplaggregation(args):
         joins.append(CondAlias(qsts[0].selectsdom[0].table, "", qsts[0].selectsdom[0].get_column(), qsts[1].selectsdom[0].get_column()))
     selectscod = []
     for s in qsts[0].selectscod:
-        selectscod.append(ExpressionAlias([s.get_column()], "", "SUM"))
+        selectscod.append(ExpressionAlias([s.get_column()], alias = s.alias, infix = "", prefix = "SUM"))
     frm = qsts[1].frm
     joins += [ j for j in qsts[0].joins + qsts[1].joins ]
     wheres = [ w for w in qsts[0].wheres + qsts[1].wheres ]
     groupbys = [ s.get_column() for s in selectsdom if s.table ]
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
-    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts)
+    qst = QStruct(selectsdom, selectscod, frm, joins, wheres, groupbys, frozen_qsts, False, qsts[0].orderby, qsts[0].orderdir)
     return qst
 
-def cmplprojection(args):
-    return QStruct([], [], [])
+def cmplprojection(args, var, order):
+    """ The projection operator has as input n arguments. The last argument is a number n
+        while the other arguments are terms. The projection operator selects the nth term
+        from the list of terms. The parameter n is between 1 and the number of terms, inclusive"""
+    
+    return QProjection(args[-1])
 
-def cmplvariable(term):
-    if term.codomain == one or term.name[:3] == "een":
-        return cmplimmediate(term)
-
-    # Code below is identical to cmplobjecttyperelation()
-    table = findtable(term)
-    name = re.sub(' ', '_', term.name)
-    frm = TableAlias(table, table)
-    selectsdom = [ ColumnAlias(frm.get_alias(), f"{table}_id", "") ]
-    selectscod = [ ColumnAlias(frm.get_alias(), f"{name}", "") ]
-    qst = QStruct(selectsdom, selectscod, frm, [], [])
-    return qst
-
+def cmploperator(term, var, order):
+    if term.name == "(/)":
+        qop = QOperator(infix = " / ")
+        return qop
+    
 def findtable(term):
     for d in data:
         if foundsome(term, d.constr):
@@ -575,40 +563,51 @@ def foundsome(subterm, term):
             return True
     return False
     
-def cmplimmediate(term):
-    if term.codomain == one:
-        imm = "'*'"
-    elif term.name[:3] == "een":
-        imm = "1"
-    table = term.domain.name
-    frm = TableAlias(table, "") 
-    selectsdom = [ ColumnAlias(frm.get_alias(), f"{table}_id", "") ]
-    selectscod = [ ColumnAlias("", f"{imm}", "") ]
-    qst = QStruct(selectsdom, selectscod, frm, [], [])
-    return qst
-
-def cmplobjecttyperelation(term):
+def cmplobjecttyperelation(term, var, order):
     table = findtable(term)
     name = re.sub(' ', '_', term.name)
-    frm = TableAlias(table, table)
+    frm = TableAlias(table)
     selectsdom = [ ColumnAlias(frm.get_alias(), f"{table}_id", "") ]
     selectscod = [ ColumnAlias(frm.get_alias(), f"{name}", "") ]
     qst = QStruct(selectsdom, selectscod, frm, [], [])
     return qst
 
-def cmplconstant(term):
+def cmplvariable(term, var, order):
+    if term.codomain == one or term.name[:3] == "een":
+        return cmplimmediate(term, var, order)
+
+    # Code below is identical to cmplobjecttyperelation()
+    table = findtable(term)
+    name = re.sub(' ', '_', term.name)
+    frm = TableAlias(table)
+    selectsdom = [ ColumnAlias(frm.get_alias(), f"{table}_id", "") ]
+    selectscod = [ ColumnAlias(frm.get_alias(), f"{name}", "") ]
+    orderby = None
+    if var is not None and var.equals(term):
+        orderby = Name("key")
+        selectscod[0].alias = Name("key")
+    qst = QStruct(selectsdom, selectscod, frm, None, None, None, None, None, orderby, order)
+    return qst
+
+def cmplimmediate(term, var, order):
+    if term.codomain == one:
+        imm = "'*'"
+    elif term.name[:3] == "een":
+        imm = "1"
+    table = term.domain.name
+    frm = TableAlias(table) 
+    selectsdom = [ ColumnAlias(frm.get_alias(), f"{table}_id", "") ]
+    selectscod = [ ColumnAlias("", f"{imm}", "") ]
+    qst = QStruct(selectsdom, selectscod, frm, [], [])
+    return qst
+
+def cmplconstant(term, var, order):
     name = re.sub(" ", "_", term.name)
     selectsdom = [ ColumnAlias("", f"'*'", "") ]
     selectscod = [ ColumnAlias("", f"'{name}'", "") ]
-    qst = QStruct(selectsdom, selectscod, TableAlias("",""), [], [])
+    qst = QStruct(selectsdom, selectscod, TableAlias(""), [], [])
     return qst
 
-def cmploperator(term):
-    #qst = QStruct(None, None, None, None, None)
-    if term.name == "(/)":
-        qop = QOperator(infix = " / ")
-    return qop
-    
 if __name__ == '__main__':
     #testTableAlias()
     #testColumn()

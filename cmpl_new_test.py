@@ -3,13 +3,20 @@ from kind import Variable, ObjectTypeRelation, Constant, Operator
 from dm import *
 from cmpl_new import cmpl
 
+def show_tests(terms):
+    for i, term in enumerate(terms):
+        print(i, repr(term[0]))
+
+        
 def test_terms(terms, showall = False):
     error = False
     for i, term in enumerate(terms):
+        #output = repr(cmpl(term[0], leeftijd, "asc"))
         output = repr(cmpl(term[0]))
         expected = term[1]
         if showall or output != expected:
-            msg = (f"======test {i} failed===========\n" +
+            failstr = " failed" if output != expected else "======="
+            msg = (f"======test {i}{failstr}===========\n" +
                   repr(term[0]) + "\n\n" +
                   "Output:\n" +
                   output + "\n\n" +
@@ -389,7 +396,28 @@ FROM persoon
 """ ], [
     eenbaan,
     """\
-""" ]
+""" ], [
+    Application(composition, [
+        Application(projection, [ getal, getal, adres, 3]),
+        Application(product, [ inkomen, leeftijd, woontop ])
+    ]),
+    """\
+""" ], [
+    Application(composition, [ leeftijd, werknemer ]),
+    """\
+""" ], [
+    Application(product, [ leeftijd, inkomen ]),
+    """\
+"""], [
+    Application(alpha, [ leeftijd, geslacht ]),
+    """\
+"""], [
+    Application(composition, [
+        gedeelddoor,
+        Application(product, [ inkomen, leeftijd ])
+    ]),
+    """\
+"""]
 ]
-
-    test_terms(terms)
+    show_tests(terms)
+    #test_terms(terms, True)

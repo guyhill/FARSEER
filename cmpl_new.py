@@ -448,6 +448,10 @@ def cmplproduct(args, var, order):
 
     selectsdom = qsts[0].selectsdom
     joins = []
+
+    # Is the following necessary? 
+    # domain of all product operands must be the same, can we then conclude that table is also the same?
+    # If this is the case, this code is not necessary
     for qst in qsts[1:]:
         if qst.selectsdom[0].table != selectsdom[0].table:
             joins.append(CondAlias(qst.selectsdom[0].table, "", selectsdom[0].get_column(), qst.selectsdom[0].get_column()))

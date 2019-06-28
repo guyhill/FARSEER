@@ -7,12 +7,14 @@ def show_tests(terms):
     for i, term in enumerate(terms):
         print(i, repr(term[0]))
 
-        
-def test_terms(terms, showall = False):
+
+def test_terms(terms, showall = False, ordered = False):
     error = False
     for i, term in enumerate(terms):
-        #output = repr(cmpl(term[0], leeftijd, "asc"))
-        output = repr(cmpl(term[0]))
+        if ordered:
+            output = repr(cmpl(term[0], leeftijd, "asc"))
+        else:
+            output = repr(cmpl(term[0]))
         expected = term[1]
         if showall or output != expected:
             failstr = " failed" if output != expected else "======="
@@ -30,29 +32,77 @@ def test_terms(terms, showall = False):
               
 if __name__ == "__main__":
     terms = [ 
-    [   # object type relation
+    [       # object type relation
     woontop, 
     """\
 SELECT persoon.persoon_id, persoon.woont_op
 FROM persoon
-""" ], [          
-    ligtin,
+""" ], [    # Variabele
+    leeftijd,
     """\
-SELECT adres.adres_id, adres.ligt_in
-FROM adres
-""" ], [
-    Application(composition, [ ligtin, woontop ]),
-    """\
-SELECT persoon.persoon_id, persoon_woont_op.ligt_in
+SELECT persoon.persoon_id, persoon.leeftijd
 FROM persoon
-JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
-""" ], [
+""" ], [    # Immediate variabele "alle"
+    allepersonen, 
+    """\
+SELECT persoon.persoon_id, '*'
+FROM persoon
+""" ], [    # Immediate variable "een"
+    eenpersoon,
+    """\
+SELECT persoon.persoon_id, 1
+FROM persoon
+""" ], [    # Constante
+    leiden, 
+    """\
+SELECT '*', 'Leiden'
+""" ], [    # Compositie
     Application(composition, [ ligtin, gevestigdop, werkgever ]),
     """\
 SELECT baan.baan_id, baan_werkgever_gevestigd_op.ligt_in
 FROM baan
 JOIN (bedrijf AS baan_werkgever) ON (baan_werkgever.bedrijf_id = baan.werkgever)
 JOIN (adres AS baan_werkgever_gevestigd_op) ON (baan_werkgever_gevestigd_op.adres_id = baan_werkgever.gevestigd_op)
+""" ], [    # Product
+    Application(product, [ werknemer, werkgever ]),
+    """\
+SELECT baan.baan_id, baan.werknemer, baan.werkgever
+FROM baan
+""" ], [    # Inclusie (geen realistisch voorbeeld, wel een voorbeeld met alleen inclusie en geen andere operatoren)
+    Application(inclusion, [ leeftijd, inkomen ]),
+    """\
+SELECT persoon.persoon_id, persoon.persoon_id
+FROM persoon
+WHERE (persoon.leeftijd = persoon.inkomen)
+""" ], [    # Inversie
+    Application(inverse, [
+        werknemer
+    ]),
+    """\
+SELECT DISTINCT baan.werknemer, baan.werknemer
+FROM baan
+""" ], [    # Aggregatie
+    Application(alpha, [inkomen, geslacht]),
+    """\
+SELECT persoon.geslacht, SUM(persoon.inkomen)
+FROM persoon
+GROUP BY persoon.geslacht
+""" ], [    # Simpelste geval van een numerieke operator
+    Application(composition, [
+        gedeelddoor, 
+        Application(product, [ inkomen, leeftijd ])
+    ]),
+    """\
+SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd)
+FROM persoon
+""" ], [    # Simpelste geval van een projectie-operator
+    Application(composition, [
+        Application(projection, [ getal, adres, 2]),
+        Application(product, [ inkomen, woontop ])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.woont_op
+FROM persoon
 """ ], [
     Application(composition, [
         ligtin,
@@ -74,11 +124,6 @@ FROM baan
 JOIN (bedrijf AS baan_werkgever) ON (baan_werkgever.bedrijf_id = baan.werkgever)
 JOIN (adres AS baan_werkgever_gevestigd_op) ON (baan_werkgever_gevestigd_op.adres_id = baan_werkgever.gevestigd_op)
 """ ], [
-    Application(product, [ werknemer, werkgever ]),
-    """\
-SELECT baan.baan_id, baan.werknemer, baan.werkgever
-FROM baan
-""" ], [
     Application(product, [ 
         Application(composition, [ ligtin, woontop, werknemer ]),
         Application(composition, [ ligtin, gevestigdop, werkgever ])
@@ -90,25 +135,6 @@ JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
 JOIN (adres AS baan_werknemer_woont_op) ON (baan_werknemer_woont_op.adres_id = baan_werknemer.woont_op)
 JOIN (bedrijf AS baan_werkgever) ON (baan_werkgever.bedrijf_id = baan.werkgever)
 JOIN (adres AS baan_werkgever_gevestigd_op) ON (baan_werkgever_gevestigd_op.adres_id = baan_werkgever.gevestigd_op)
-""" ], [
-    leeftijd, # Variabele
-    """\
-SELECT persoon.persoon_id, persoon.leeftijd
-FROM persoon
-""" ], [
-    allepersonen, # Variabele "alle"
-    """\
-SELECT persoon.persoon_id, '*'
-FROM persoon
-""" ], [
-    eenpersoon,   # Variable "een"
-    """\
-SELECT persoon.persoon_id, 1
-FROM persoon
-""" ], [
-    leiden, # Constante
-    """\
-SELECT '*', 'Leiden'
 """ ], [
     Application(composition, [ leiden, allepersonen ]),
     """\
@@ -324,14 +350,6 @@ GROUP BY persoon.geslacht
     """ ], [
     Application(composition, [
         gedeelddoor, 
-        Application(product, [ inkomen, leeftijd ])
-    ]),
-    """\
-SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd)
-FROM persoon
-""" ], [
-    Application(composition, [
-        gedeelddoor, 
         Application(product, [
             Application(composition, [
                 gedeelddoor, 
@@ -343,11 +361,6 @@ FROM persoon
     """\
 SELECT persoon.persoon_id, ((persoon.inkomen / persoon.leeftijd) / persoon.leeftijd)
 FROM persoon
-""" ], [
-    Application(inverse, [
-        werknemer
-    ]),
-    """\
 """ ], [
     Application(alpha, [
         Application(composition, [
@@ -396,13 +409,22 @@ FROM persoon
 """ ], [
     eenbaan,
     """\
-""" ], [
-    Application(composition, [
-        Application(projection, [ getal, getal, adres, 3]),
-        Application(product, [ inkomen, leeftijd, woontop ])
-    ]),
+""" ], [    # The ones below can potentially be deleted      
+    ligtin,
     """\
+SELECT adres.adres_id, adres.ligt_in
+FROM adres
 """ ], [
+    Application(composition, [ ligtin, woontop ]),
+    """\
+SELECT persoon.persoon_id, persoon_woont_op.ligt_in
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+""" ]
+]
+
+    terms_ordered = [
+    [
     Application(composition, [ leeftijd, werknemer ]),
     """\
 """ ], [
@@ -419,5 +441,9 @@ FROM persoon
     """\
 """]
 ]
-    show_tests(terms)
-    #test_terms(terms, True)
+    #show_tests(terms)
+    test_terms(terms[:12])
+    test_terms(terms_ordered, ordered = True)
+
+
+    

@@ -451,7 +451,7 @@ def cmplproduct(args, var, order):
 
     # Is the following necessary? 
     # domain of all product operands must be the same, can we then conclude that table is also the same?
-    # If this is the case, this code is not necessary
+    # If this is the case, this for loop is not necessary
     for qst in qsts[1:]:
         if qst.selectsdom[0].table != selectsdom[0].table:
             joins.append(CondAlias(qst.selectsdom[0].table, "", selectsdom[0].get_column(), qst.selectsdom[0].get_column()))
@@ -580,7 +580,7 @@ def cmplvariable(term, var, order):
     if term.codomain == one or term.name[:3] == "een":
         return cmplimmediate(term, var, order)
 
-    # Code below is identical to cmplobjecttyperelation()
+    # Code below copied from cmplobjecttyperelation() and adaptedIK 
     table = findtable(term)
     name = re.sub(' ', '_', term.name)
     frm = TableAlias(table)

@@ -36,6 +36,8 @@ gevestigdop = ObjectTypeRelation(name='gevestigd op', domain=bedrijf, codomain=a
 # variables
 leeftijd = Variable(name='leeftijd', domain=persoon, codomain=getal)
 inkomen = Variable(name='inkomen', domain=persoon, codomain=getal)
+lengte = Variable(name='lengte', domain=persoon, codomain=getal)
+gewicht = Variable(name='gewicht', domain=persoon, codomain=getal)
 geslacht = Variable(name='geslacht', domain=persoon, codomain=geslachten)
 geboortedatum = Variable(name='geboortedatum', domain=persoon, codomain=datum)
 naam = Variable(name='naam', domain=persoon, codomain=namen)
@@ -177,7 +179,7 @@ gedeelddoor = Operator(name='(/)', domain=Application(cartesian_product,[getal, 
 
 # domain model
 domainmodel = [persoon, adres, gemeente, provincie, baan, bedrijf, getal, datum, tekst, gemeentenamen, provincienamen, straatnamen, geslachten, huisnummers,
-      namen, beroepen, activiteiten, woontop, ligtin, werknemer, werkgever, gevestigdop, leeftijd, inkomen, geslacht, geboortedatum, naam, huisnummer, straatnaam, gemeentenaam,
+      namen, beroepen, activiteiten, woontop, ligtin, werknemer, werkgever, gevestigdop, leeftijd, inkomen, gewicht, lengte, geslacht, geboortedatum, naam, huisnummer, straatnaam, gemeentenaam,
       salaris, functie, omzet, economischehoofdactiviteit, man, vrouw, gedeelddoor, persoonid, adresid, gemeenteid, provincieid, baanid, bedrijfid]
 
 #### persoonadresid, adresgemeenteid, bedrijfid, baanpersoonid, baanbedrijfid, bedrijfadresid
@@ -193,7 +195,7 @@ domainmodel.extend([denhaag, delft, rotterdam, utrecht,
 
 
 # datasets
-persoondata = DatasetDesign(name='persoon', constr=Application(product, [persoonid, naam, leeftijd, geslacht, inkomen, persoonadresid]))
+persoondata = DatasetDesign(name='persoon', constr=Application(product, [persoonid, naam, leeftijd, lengte, gewicht, geslacht, inkomen, persoonadresid]))
 adresdata = DatasetDesign(name='adres', constr=Application(product, [adresid, straatnaam, huisnummer, adresgemeenteid]))
 gemeentedata = DatasetDesign(name='gemeente', constr=Application(product, [gemeenteid, gemeentenaam, gemeenteprovincieid]))
 provinciedata = DatasetDesign(name='provincie', constr=Application(product, [provincieid, provincienaam]))

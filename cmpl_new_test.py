@@ -321,17 +321,20 @@ SELECT '*', SUM(1)
 FROM persoon
 """],
     # From here on, tests deal with combinations of operators. We include test cases for
-    # every possible combination of two operators. We then assume that combinations of 
+    # every possible combination of two operators with 2 arguments each. We then assume that combinations of 
     # more than two operators will work as well, due to the recursive nature of the compiler.
     # We distinguish the following cases, and include on test for each of them:
     # A. Composition
     # 1. Product inside left hand side of composition
-    # 2. Product inside right hand side of composition. Only one possible case: the division operator
+    # 2. Product inside right hand side of composition. Only two possible cases: 
+    #    a. the division operator
+    #    b. the projection operator
     # 3. Aggregation inside left hand side of composition. Aggregation inside rhs is not possible,
     #    because the co-domain of aggregation is a number, and nothing has number as domain
-    # 4. Inclusion inside lhs of composition
+    # 4. Inclusion inside lhs of composition <-- this one cannot occur as the domain of inclusion 
+    #                                            is a subset of an object type, not the object type itself
     # 5. Inclusion inside rhs of composition
-    # 6. Inverse in lhs of composition
+    # 6. Inverse in lhs of composition <-- This one cannot occur, for the same reason as inclusion
     # 7. Inverse in rhs of composition
     # 8. Composition in lhs of composition
     # 9. Composition in rhs of composition
@@ -352,49 +355,290 @@ JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
     """\
 SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd)
 FROM persoon
+""" ], [     # Product inside right hand side of composition, with projection
+    Application(composition, [
+        Application(projection, [getal, getal, 2]), 
+        Application(product, [ inkomen, leeftijd ])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.leeftijd
+FROM persoon
 """ ], [    # Aggregation inside left hand side of composition
     Application(composition, [
         Application(alpha, [leeftijd, woontop]),
         gevestigdop
     ]),
     """\
-"""], [    # Inclusion inside lhs of composition TODO: Discuss with Tjalling 
-    Application(composition, [
-        Application(inclusion, [leeftijd, leeftijd]),
-        werknemer
-    ]),
-    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon.woont_op AS col0, SUM(persoon.leeftijd) AS col1
+FROM persoon
+GROUP BY persoon.woont_op
+SELECT bedrijf.bedrijf_id, tmp0.col1
+FROM bedrijf
+JOIN (tmp0) ON (tmp0.col0 = bedrijf.gevestigd_op)
 """], [    # Inclusion inside rhs of composition
     Application(composition, [
         woontop,
         Application(inclusion, [leeftijd, gewicht])
     ]),
     """\
-"""], [    # Inverse in lhs of composition
-    Application(composition, [
-        Application(inverse, [gevestigdop]),
-        woontop
-    ]),
-    """\
+SELECT persoon.persoon_id, persoon.woont_op
+FROM persoon
+WHERE (persoon.leeftijd = persoon.gewicht)
 """], [    # Inverse in rhs of composition
     Application(composition, [
         leeftijd,
         Application(inverse, [werknemer])
     ]),
     """\
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+SELECT tmp0.col0, tmp0_col1.leeftijd
+FROM tmp0
+JOIN (persoon AS tmp0_col1) ON (tmp0_col1.persoon_id = tmp0.col1)
 """], [    # Composition in lhs of composition
     Application(composition, [
         Application(composition, [ligtin, woontop]),
         werknemer
     ]),
     """\
+SELECT baan.baan_id, baan_werknemer_woont_op.ligt_in
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+JOIN (adres AS baan_werknemer_woont_op) ON (baan_werknemer_woont_op.adres_id = baan_werknemer.woont_op)
 """], [    # Composition in rhs of composition
     Application(composition, [
         ligtin,
         Application(composition, [woontop, werknemer])
     ]),
     """\
-"""]
+SELECT baan.baan_id, baan_werknemer_woont_op.ligt_in
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+JOIN (adres AS baan_werknemer_woont_op) ON (baan_werknemer_woont_op.adres_id = baan_werknemer.woont_op)
+"""],
+    # B. Product
+    # 1. Composition in lhs of product
+    # 2. Composition in rhs of product
+    # 3. Product in lhs of product
+    # 4. Product in rhs of product
+    # 5. Inclusion in lhs and rhs of product
+    #    Note: it is not possible to have inclusion in lhs without also having inclusion in rhs
+    #    Reason for this is that domain of lhs & rhs must be the same, and inclusion has its own domain,
+    #    different from the domain of the otr's inside the inclusion. No otr / variable / constant
+    #    has the same domain as an inclusion.
+    # 6. Inverse in lhs and rhs of product.
+    #    Note: like inclusion, it is not possible to have inverse in lhs without having the same inverse in rhs.
+    # 7. Aggregation in lhs of product
+    # 8. Aggregation in rhs of product
+    [       # Composition in lhs of product
+    Application(product, [
+        Application(composition, [ligtin, woontop]),
+        leeftijd
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon_woont_op.ligt_in, persoon.leeftijd
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+"""], [     # Composition in rhs of product
+    Application(product, [
+        leeftijd,
+        Application(composition, [ligtin, woontop])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.leeftijd, persoon_woont_op.ligt_in
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+"""], [     # Product in lhs of product
+    Application(product, [
+        Application(product, [leeftijd, inkomen]),
+        lengte
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.leeftijd, persoon.inkomen, persoon.lengte
+FROM persoon
+"""], [     # Product in rhs of product
+    Application(product, [
+        lengte,
+        Application(product, [leeftijd, inkomen])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.lengte, persoon.leeftijd, persoon.inkomen
+FROM persoon
+"""], [     # Inclusion in lhs and rhs of product
+    Application(product, [
+        Application(inclusion, [leeftijd, gewicht]),
+        Application(inclusion, [leeftijd, gewicht])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.persoon_id, persoon.persoon_id
+FROM persoon
+WHERE (persoon.leeftijd = persoon.gewicht)
+"""], [     # Inverse in lhs & rhs of product
+    Application(product, [
+        Application(inverse, [werknemer]),
+        Application(inverse, [werknemer])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+SELECT tmp0.col0, tmp0.col1, tmp0.col1
+FROM tmp0
+"""], [     # Aggregation in lhs of product
+    Application(product, [
+        Application(alpha, [salaris, werknemer]),
+        inkomen
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT baan.werknemer AS col0, SUM(baan.salaris) AS col1
+FROM baan
+GROUP BY baan.werknemer
+SELECT tmp0.col0, tmp0.col1, persoon.inkomen
+FROM tmp0
+JOIN (persoon) ON (tmp0.col0 = persoon.persoon_id)
+"""], [     # Aggregation in rhs of product
+    Application(product, [
+        inkomen,
+        Application(alpha, [salaris, werknemer])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT baan.werknemer AS col0, SUM(baan.salaris) AS col1
+FROM baan
+GROUP BY baan.werknemer
+SELECT persoon.persoon_id, persoon.inkomen, tmp0.col1
+FROM persoon
+JOIN (tmp0) ON (persoon.persoon_id = tmp0.col0)
+"""],
+    # C. Inclusion
+    # 1. Composition in lhs of inclusion
+    # 2. Composition in rhs of inclusion
+    # 3. Product in lhs & rhs of inclusion
+    #    Note: no primitives exist with multi-dimensional co-domain, so 
+    #    it is impossible to have an inclusion with a product in lhs and a primitive in rhs
+    #    Note: I chose not to implement inclusions with multi-dimensional co-domain
+    # 4. Inclusion inside inclusion? Does this even make sense?
+    # 5. Inverse in lhs and rhs of inclusion
+    #    Note: like with products, it is impossible to have inverse on one side and a primitive on the other side.
+    # 6. Aggregation inside inclusion?
+    [       # Composition in lhs of inclusion
+    Application(inclusion, [
+        Application(composition, [ inkomen, werknemer ]),
+        salaris
+    ]),
+    """\
+SELECT baan.baan_id, baan.baan_id
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+WHERE (baan_werknemer.inkomen = baan.salaris)
+"""], [     # Composition in rhs of inclusion
+    Application(inclusion, [
+        salaris,
+        Application(composition, [ inkomen, werknemer ]),
+    ]),
+    """\
+SELECT baan.baan_id, baan.baan_id
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+WHERE (baan.salaris = baan_werknemer.inkomen)
+"""], [    # Inverse in lhs & rhs of inclusion
+    Application(inclusion, [
+        Application(inverse, [werknemer]),
+        Application(inverse, [werknemer])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+SELECT tmp0.col0, tmp0.col0
+FROM tmp0
+WHERE (tmp0.col1 = tmp0.col1)
+"""], [     # Aggregation in lhs of inclusion
+    Application(inclusion, [
+        Application(alpha, [ salaris, werknemer ]),
+        inkomen
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT baan.werknemer AS col0, SUM(baan.salaris) AS col1
+FROM baan
+GROUP BY baan.werknemer
+SELECT tmp0.col0, tmp0.col0
+FROM tmp0
+JOIN (persoon) ON (tmp0.col0 = persoon.persoon_id)
+WHERE (tmp0.col1 = persoon.inkomen)
+"""], [     # Aggregation in rhs of inclusion
+    Application(inclusion, [
+        inkomen,
+        Application(alpha, [ salaris, werknemer ])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT baan.werknemer AS col0, SUM(baan.salaris) AS col1
+FROM baan
+GROUP BY baan.werknemer
+SELECT persoon.persoon_id, persoon.persoon_id
+FROM persoon
+JOIN (tmp0) ON (persoon.persoon_id = tmp0.col0)
+WHERE (persoon.inkomen = tmp0.col1)
+"""],
+    # D. Inverse
+    # 1. Composition inside inverse
+    # 2. Product inside inverse
+    # 3. Inclusion inside inverse
+    # 4. Inverse inside inverse
+    # 5. Aggregation inside inverse
+    #
+    # Note: only 1 is used in practice, the others are entirely hypothetical
+    [       # Composition in inverse
+    Application(inverse, [
+        Application(composition, [ligtin, woontop])
+    ]),
+    """\
+SELECT DISTINCT persoon_woont_op.ligt_in, persoon_woont_op.ligt_in
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+"""], [     # Product in inverse
+    Application(inverse, [
+        Application(product, [werknemer, salaris])
+    ]),
+    """\
+SELECT DISTINCT baan.werknemer, baan.salaris, baan.werknemer, baan.salaris
+FROM baan
+"""], [     # Inclusion in inverse
+    Application(inverse, [
+        Application(inclusion, [salaris, eenbaan])
+    ]),
+    """\
+SELECT DISTINCT baan.baan_id, baan.baan_id
+FROM baan
+WHERE (baan.salaris = 1)
+"""], [     # Inverse in inverse
+    Application(inverse, [
+        Application(inverse, [ werknemer ])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+SELECT DISTINCT tmp0.col1, tmp0.col1
+FROM tmp0
+"""], [     # Aggregation in inverse
+    Application(inverse, [
+        Application(alpha, [salaris, werknemer])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT baan.werknemer AS col0, SUM(baan.salaris) AS col1
+FROM baan
+GROUP BY baan.werknemer
+SELECT DISTINCT tmp0.col1, tmp0.col1
+FROM tmp0
+"""],
+    # E. Aggregation
 ]
 
 

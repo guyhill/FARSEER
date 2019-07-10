@@ -253,6 +253,9 @@ class QStruct:
                 w.lhs.table = new_table
             if w.rhs.table == old_table:
                 w.rhs.table = new_table
+        for g in self.groupbys:
+            if g.table == old_table:
+                g.table = new_table
             
     def dedup_frozen(self):
         if not DEDUP_FROZEN:
@@ -486,13 +489,17 @@ def cmplinclusion(args, var, order):
     selectscod = deepcopy(selectsdom)
     frm = qsts[0].frm
     joins += [ j for q in qsts for j in q.joins]
-    wheres = []
+    wheres = qsts[0].wheres     # Gather wheres from inclusions within inclusions.
+                                # If arguments contain wheres, they should be the same for all arguments, 
+                                # since the domain of every argument must be the same. Hence it is sufficient
+                                # to only gather the wheres from the 1st argument.
     for i, q in enumerate(qsts):
         if i % 2 == 0: # LHS of comparison
-            lhs = q.selectscod[0] # assume 1-dimensional cod only
+            lhs = q.selectscod
         else:
-            rhs = q.selectscod[0]
-            wheres.append(Cond(lhs, rhs))
+            rhs = q.selectscod
+            for l, r in zip(lhs, rhs):  # We can assume the input is well-formed, and hence lhs and rhs have the same length
+                wheres.append(Cond(l, r))
     frozen_qsts = [ f for q in qsts for f in q.frozen_qsts ]
     qst = QStruct(selectsdom, selectscod, frm, joins, wheres, [], frozen_qsts)
     return qst

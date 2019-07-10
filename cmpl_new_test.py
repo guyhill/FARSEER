@@ -517,13 +517,12 @@ JOIN (tmp0) ON (persoon.persoon_id = tmp0.col0)
     # 1. Composition in lhs of inclusion
     # 2. Composition in rhs of inclusion
     # 3. Product in lhs & rhs of inclusion
-    #    Note: no primitives exist with multi-dimensional co-domain, so 
-    #    it is impossible to have an inclusion with a product in lhs and a primitive in rhs
-    #    Note: I chose not to implement inclusions with multi-dimensional co-domain
-    # 4. Inclusion inside inclusion? Does this even make sense?
+    #    Note: only a product has a multi-dimensional co-domain, so 
+    #    testing products in inclusion is only possible if both lhs and rhs are products
+    # 4. Inclusion inside inclusion
     # 5. Inverse in lhs and rhs of inclusion
     #    Note: like with products, it is impossible to have inverse on one side and a primitive on the other side.
-    # 6. Aggregation inside inclusion?
+    # 6. Aggregation inside inclusion
     [       # Composition in lhs of inclusion
     Application(inclusion, [
         Application(composition, [ inkomen, werknemer ]),
@@ -544,6 +543,24 @@ SELECT baan.baan_id, baan.baan_id
 FROM baan
 JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
 WHERE (baan.salaris = baan_werknemer.inkomen)
+"""], [     # Product in lhs & rhs of inclusion
+    Application(inclusion, [
+        Application(product, [lengte, gewicht]),
+        Application(product, [ inkomen, leeftijd])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.persoon_id
+FROM persoon
+WHERE (persoon.lengte = persoon.inkomen) AND (persoon.gewicht = persoon.leeftijd)
+"""], [     # Inclusion in lhs & rhs of inclusion. We need some more machinery to make this work
+    Application(inclusion, [
+        Application(composition, [leeftijd, Application(inclusion, [lengte, gewicht])]),
+        Application(composition, [inkomen, Application(inclusion, [lengte, gewicht])])
+    ]),
+    """\
+SELECT persoon.persoon_id, persoon.persoon_id
+FROM persoon
+WHERE (persoon.lengte = persoon.gewicht) AND (persoon.leeftijd = persoon.inkomen)
 """], [    # Inverse in lhs & rhs of inclusion
     Application(inclusion, [
         Application(inverse, [werknemer]),
@@ -603,10 +620,10 @@ FROM persoon
 JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
 """], [     # Product in inverse
     Application(inverse, [
-        Application(product, [werknemer, salaris])
+        Application(product, [werknemer, werkgever])
     ]),
     """\
-SELECT DISTINCT baan.werknemer, baan.salaris, baan.werknemer, baan.salaris
+SELECT DISTINCT baan.werknemer, baan.werkgever, baan.werknemer, baan.werkgever
 FROM baan
 """], [     # Inclusion in inverse
     Application(inverse, [
@@ -639,44 +656,128 @@ SELECT DISTINCT tmp0.col1, tmp0.col1
 FROM tmp0
 """],
     # E. Aggregation
-]
-
-
-
-
-
-
-    oldterms = [
-    [    # Inversie
-    Application(inverse, [
+    # Note: since the first argument of aggregation has a very different function compared to the
+    # second argument, it is imperative here to test every other operator in both the first and 
+    # second argument.
+    # 1. Composition in 1st argument of aggregation
+    # 2. Composition in 2nd argument of aggregation
+    # 3. Product in 1st argument of aggregation
+    # --> Only if the codomains of all members of the product are "number"
+    # 4. Product in 2nd argument of aggregation
+    # 5. Inclusion in 1st argument of aggregation
+    # --> Does not make any sense by itself, as the co-domain of the 1st argument of aggregation
+    #     must be "number", while the co-domain of inclusion is the domain of its arguments
+    # 6. Inclusion in 2nd argument of aggregation
+    # --> Does not make sense by itself, but we can combine lhs & rhs inclusions with "one" in lhs
+    # --> I don't think this make sense either, as the domain of inclusion is a sigma term,
+    #     while the domain of the 1st argument is an object type. 
+    # 7. Inverse in 1st argument of aggregation
+    # --> Like inclusion, I don't think this makes sense as inverse does not have co-domain "number"
+    # 8. Inverse in 2nd argument of aggregation
+    # --> Like inclusion, I don't think this makes sense either, as the domain of inverse is a rho term,
+    #     while the domain of the 1st argument of alpha is an object type
+    # --> Like inclusion, we can use inverse in both arguments of alpha, and combine with "one"
+    # 9. Aggregation in 1st argument of aggregation
+    # --> Should not happen in real input, good to know if it works nonetheless.
+    # 10. Aggregation in 2nd argument of aggregation
+    # --> For frequency counts and the like
+    [       # Composition in 1st argument of aggregation
+    Application(alpha, [
+        Application(composition, [ inkomen, werknemer ]),
         werknemer
     ]),
     """\
-SELECT DISTINCT baan.werknemer, baan.werknemer
+SELECT baan.werknemer, SUM(baan_werknemer.inkomen)
 FROM baan
-""" ], [    # Aggregatie
-    Application(alpha, [inkomen, geslacht]),
-    """\
-SELECT persoon.geslacht, SUM(persoon.inkomen)
-FROM persoon
-GROUP BY persoon.geslacht
-""" ], [    # Simpelste geval van een numerieke operator
-    Application(composition, [
-        gedeelddoor, 
-        Application(product, [ inkomen, leeftijd ])
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+GROUP BY baan.werknemer
+"""], [     # Composition in 2nd argument of aggregation
+    Application(alpha, [
+        eenpersoon,
+        Application(composition, [ligtin, woontop])
     ]),
     """\
-SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd)
+SELECT persoon_woont_op.ligt_in, SUM(1)
 FROM persoon
-""" ], [    # Simpelste geval van een projectie-operator
-    Application(composition, [
-        Application(projection, [ getal, adres, 2]),
-        Application(product, [ inkomen, woontop ])
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+GROUP BY persoon_woont_op.ligt_in
+"""], [     # Product in 1st argument of aggregation
+    Application(alpha, [
+        Application(product, [ eenpersoon, inkomen]),
+        woontop
     ]),
     """\
-SELECT persoon.persoon_id, persoon.woont_op
+SELECT persoon.woont_op, SUM(1), SUM(persoon.inkomen)
 FROM persoon
-""" ], [
+GROUP BY persoon.woont_op
+"""], [     # Product in 2nd argument of aggregation
+    Application(alpha, [
+        eenpersoon,
+        Application(product, [woontop, geslacht])
+    ]),
+    """\
+SELECT persoon.woont_op, persoon.geslacht, SUM(1)
+FROM persoon
+GROUP BY persoon.woont_op, persoon.geslacht
+"""], [     # Inclusion in both arguments of aggregation
+    Application(alpha, [
+        Application(composition, [eenpersoon, Application(inclusion, [ leeftijd, inkomen ])]),
+        Application(inclusion, [ leeftijd, inkomen ])
+    ]),
+    """\
+SELECT persoon.persoon_id, SUM(1)
+FROM persoon
+WHERE (persoon.leeftijd = persoon.inkomen)
+GROUP BY persoon.persoon_id
+"""], [     # Inverse in 2nd argument of aggregation
+    Application(alpha, [
+        Application(composition, [eenpersoon, Application(inverse, [werknemer])]),
+        Application(inverse, [werknemer])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+SELECT tmp0.col1, SUM(1)
+FROM tmp0
+JOIN (persoon AS tmp0_col1) ON (tmp0_col1.persoon_id = tmp0.col1)
+GROUP BY tmp0.col1
+"""], [     # Aggregation in 1st argument of aggregation
+    Application(alpha, [
+        Application(alpha, [eenpersoon, woontop]),
+        ligtin
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon.woont_op AS col0, SUM(1) AS col1
+FROM persoon
+GROUP BY persoon.woont_op
+SELECT adres.ligt_in, SUM(tmp0.col1)
+FROM adres
+JOIN (tmp0) ON (tmp0.col0 = adres.adres_id)
+GROUP BY adres.ligt_in
+"""], [     # Aggregation in 2nd argument of aggregation
+    Application(alpha, [
+        eenadres, 
+        Application(alpha, [eenpersoon, woontop])
+    ]),
+    """\
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon.woont_op AS col0, SUM(1) AS col1
+FROM persoon
+GROUP BY persoon.woont_op
+SELECT tmp0.col1, SUM(1)
+FROM tmp0
+JOIN (adres) ON (adres.adres_id = tmp0.col0)
+GROUP BY tmp0.col1
+"""]
+]
+
+    # oldterms contains some more tests that are performed on the compiler. These tests do not test as
+    # systematically as the tests in terms, but they better reflect actual use and structure of expressions
+    # that have more than just a few operators.
+    oldterms = [
+    [
     Application(composition, [
         ligtin,
         Application(composition, [ gevestigdop, werkgever ])
@@ -708,11 +809,6 @@ JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
 JOIN (adres AS baan_werknemer_woont_op) ON (baan_werknemer_woont_op.adres_id = baan_werknemer.woont_op)
 JOIN (bedrijf AS baan_werkgever) ON (baan_werkgever.bedrijf_id = baan.werkgever)
 JOIN (adres AS baan_werkgever_gevestigd_op) ON (baan_werkgever_gevestigd_op.adres_id = baan_werkgever.gevestigd_op)
-""" ], [
-    Application(composition, [ leiden, allepersonen ]),
-    """\
-SELECT persoon.persoon_id, 'Leiden'
-FROM persoon
 """ ], [
     Application(inclusion, [
         Application(composition, [ gemeentenaam, ligtin, woontop ]),
@@ -837,37 +933,6 @@ JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_o
 JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeente_id = persoon_woont_op.ligt_in)
 WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')
 """ ], [
-    Application(alpha, [inkomen, geslacht]),
-    """\
-SELECT persoon.geslacht, SUM(persoon.inkomen)
-FROM persoon
-GROUP BY persoon.geslacht
-""" ], [
-    Application(alpha, [eenpersoon, geslacht]),
-    """\
-SELECT persoon.geslacht, SUM(1)
-FROM persoon
-GROUP BY persoon.geslacht
-""" ], [
-    Application(alpha, [inkomen, allepersonen]),
-    """\
-SELECT '*', SUM(persoon.inkomen)
-FROM persoon
-""" ], [
-    Application(alpha, [eenpersoon, allepersonen]),
-    """\
-SELECT '*', SUM(1)
-FROM persoon
-"""], [
-    Application(alpha, [
-        inkomen, 
-        Application(product, [ leeftijd, geslacht ])
-    ]),
-    """\
-SELECT persoon.leeftijd, persoon.geslacht, SUM(persoon.inkomen)
-FROM persoon
-GROUP BY persoon.leeftijd, persoon.geslacht
-""" ], [
     Application(alpha, [
         Application(composition, [
             inkomen,
@@ -892,15 +957,27 @@ JOIN (gemeente AS persoon_woont_op_ligt_in) ON (persoon_woont_op_ligt_in.gemeent
 WHERE (persoon_woont_op_ligt_in.gemeentenaam = 'Leiden')
 GROUP BY persoon.geslacht
 """ ], [
+    # Note: with more aggressive optimization it might be possible to simplify the SQL code below to
+    # SELECT persoon.geslacht, SUM(persoon.inkomen), SUM(1)
+    # FROM persoon
+    # GROUP BY persoon.geslacht
     Application(product, [
         Application(alpha, [ inkomen, geslacht ]),
         Application(alpha, [ eenpersoon, geslacht ])
     ]),
     """\
-SELECT persoon.geslacht, SUM(persoon.inkomen), SUM(1)
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon.geslacht AS col0, SUM(persoon.inkomen) AS col1
 FROM persoon
 GROUP BY persoon.geslacht
-""" ], [
+CREATE TEMPORARY TABLE tmp1
+SELECT persoon.geslacht AS col0, SUM(1) AS col1
+FROM persoon
+GROUP BY persoon.geslacht
+SELECT tmp0.col0, tmp0.col1, tmp1.col1
+FROM tmp0
+JOIN (tmp1) ON (tmp0.col0 = tmp1.col0)
+""" ], [    # Same thing here as in the previous query
     Application(composition, [
         gedeelddoor,
         Application(product, [
@@ -909,7 +986,18 @@ GROUP BY persoon.geslacht
         ]),
     ]),
     """\
-    """ ], [
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon.geslacht AS col0, SUM(persoon.inkomen) AS col1
+FROM persoon
+GROUP BY persoon.geslacht
+CREATE TEMPORARY TABLE tmp1
+SELECT persoon.geslacht AS col0, SUM(1) AS col1
+FROM persoon
+GROUP BY persoon.geslacht
+SELECT tmp0.col0, (tmp0.col1 / tmp1.col1)
+FROM tmp0
+JOIN (tmp1) ON (tmp0.col0 = tmp1.col0)
+""" ], [
     Application(composition, [
         gedeelddoor,
         Application(product, [
@@ -920,7 +1008,19 @@ GROUP BY persoon.geslacht
         ])
     ]),    
     """\
-    """ ], [
+CREATE TEMPORARY TABLE tmp0
+SELECT persoon_woont_op.ligt_in AS col0, SUM(persoon.inkomen) AS col1
+FROM persoon
+JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+GROUP BY persoon_woont_op.ligt_in
+CREATE TEMPORARY TABLE tmp1
+SELECT adres.ligt_in AS col0, SUM(1) AS col1
+FROM adres
+GROUP BY adres.ligt_in
+SELECT tmp0.col0, (tmp0.col1 / tmp1.col1)
+FROM tmp0
+JOIN (tmp1) ON (tmp0.col0 = tmp1.col0)
+""" ], [
     Application(composition, [
         gedeelddoor, 
         Application(product, [
@@ -962,61 +1062,58 @@ FROM persoon
         ])
     ]),
     """\
-""" ], [
-    Application(composition, [
-        eenpersoon,
-        Application(inverse, [
-            Application(composition, [
-                werknemer,
-                Application(inclusion, [
-                    Application(composition, [ gemeentenaam, ligtin, woontop, werknemer ]),
-                    Application(composition, [ denhaag, allebanen ])
-                ])
-            ])
-        ])
-    ]),
-    """\
-""" ], [
-    Application(composition, [ eenpersoon, werknemer ]),
-    """\
-""" ], [
-    eenbaan,
-    """\
-""" ], [    # The ones below can potentially be deleted      
-    ligtin,
-    """\
-SELECT adres.adres_id, adres.ligt_in
-FROM adres
-""" ], [
-    Application(composition, [ ligtin, woontop ]),
-    """\
-SELECT persoon.persoon_id, persoon_woont_op.ligt_in
-FROM persoon
-JOIN (adres AS persoon_woont_op) ON (persoon_woont_op.adres_id = persoon.woont_op)
+CREATE TEMPORARY TABLE tmp0
+SELECT DISTINCT baan.werknemer AS col0, baan.werknemer AS col1
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+JOIN (adres AS baan_werknemer_woont_op) ON (baan_werknemer_woont_op.adres_id = baan_werknemer.woont_op)
+JOIN (gemeente AS baan_werknemer_woont_op_ligt_in) ON (baan_werknemer_woont_op_ligt_in.gemeente_id = baan_werknemer_woont_op.ligt_in)
+WHERE (baan_werknemer_woont_op_ligt_in.gemeentenaam = 'Den_Haag')
+SELECT '*', SUM(1)
+FROM tmp0
+JOIN (persoon AS tmp0_col1) ON (tmp0_col1.persoon_id = tmp0.col1)
 """ ]
 ]
 
+    # Tests in terms_ordered test expressions in combination
+    # with ordering (on the variable "leeftijd")
     terms_ordered = [
     [
     Application(composition, [ leeftijd, werknemer ]),
     """\
+SELECT baan.baan_id, baan_werknemer.leeftijd AS key
+FROM baan
+JOIN (persoon AS baan_werknemer) ON (baan_werknemer.persoon_id = baan.werknemer)
+ORDER BY key ASC LIMIT 5
 """ ], [
     Application(product, [ leeftijd, inkomen ]),
     """\
+SELECT persoon.persoon_id, persoon.leeftijd AS key, persoon.inkomen
+FROM persoon
+ORDER BY key ASC LIMIT 5
 """], [
     Application(alpha, [ leeftijd, geslacht ]),
     """\
-"""], [
+SELECT persoon.geslacht, SUM(persoon.leeftijd) AS key
+FROM persoon
+GROUP BY persoon.geslacht
+ORDER BY key ASC LIMIT 5
+"""], [     # Note: ordering variable "leeftijd" in denominator, hence it should sort in descending order
+            # when asking to sort ascending according to "leeftijd".
     Application(composition, [
         gedeelddoor,
         Application(product, [ inkomen, leeftijd ])
     ]),
     """\
+SELECT persoon.persoon_id, (persoon.inkomen / persoon.leeftijd) AS key
+FROM persoon
+ORDER BY key DESC LIMIT 5
 """]
 ]
     #show_tests(terms)
     test_terms(terms)
-    #test_terms(terms_ordered, ordered = True)
+    test_terms(oldterms)
+    test_terms(terms_ordered, ordered = True)
 
 
     
